@@ -1,0 +1,203 @@
+@page "/admin/branches"
+@using Africanideasfaceapi.Services
+@using Africanideasfaceapi.Models
+@inject BranchService BranchService
+@inject AuthService Auth
+@inject NavigationManager Navigation
+
+<PageTitle>Branch Management - Admin</PageTitle>
+
+<div class="container-fluid mt-4 animate-fade-in pb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex align-items-center gap-3">
+            <div class="bg-white rounded-circle p-1 d-flex align-items-center justify-content-center shadow-sm" style="width: 50px; height: 50px;">
+                <img src="/images/african-ideas-logo.png" alt="Logo" class="w-100" />
+            </div>
+            <div>
+                <h2 class="fw-bold mb-1 text-primary">Branch Management</h2>
+                <p class="text-muted mb-0">Manage office locations and geofence parameters for attendance verification.</p>
+            </div>
+        </div>
+        <button class="btn btn-primary rounded-pill px-4 shadow-sm transition-all hover-translate-y" @onclick="() => OpenModal(null)">
+            <i class="bi bi-plus-lg me-2"></i>Add New Branch
+        </button>
+    </div>
+
+    @if (branches == null)
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            @foreach (var branch in branches)
+            {
+                <div class="col-md-4" @key="branch.Id">
+                    <div class="glass-panel p-4 rounded-4 shadow-sm border-0 h-100 transition-all hover-translate-y d-flex flex-column h-100" style="background: #ffffff; border: 1px solid #f1f5f9 !important;">
+                        <div class="d-flex justify-content-between align-items-start mb-4">
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="rounded-circle bg-primary-subtle d-flex align-items-center justify-content-center shadow-sm" style="width: 48px; height: 48px; min-width: 48px;">
+                                    <i class="bi bi-building fs-4 text-primary"></i>
+                                </div>
+                                <div>
+                                    <h5 class="fw-bold mb-0 text-dark" style="color: #1e293b !important; font-size: 1.1rem;">@branch.Name</h5>
+                                    <div class="text-muted small d-flex align-items-center gap-1 mt-1">
+                                        <i class="bi bi-geo-alt-fill text-danger opacity-75" style="font-size: 0.8rem;"></i>
+                                        <span class="font-monospace" style="font-size: 0.75rem;">@branch.Latitude.ToString("F4"), @branch.Longitude.ToString("F4")</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="dropdown">
+                                <button class="btn btn-sm rounded-pill shadow-sm border transition-all hover-translate-y d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; background: #f8fafc; border: 1px solid #e2e8f0;" type="button" data-bs-toggle="dropdown">
+                                    <i class="bi bi-three-dots-vertical" style="color: #64748b;"></i>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-4">
+                                    <li><button class="dropdown-item py-2 px-3 fw-medium" @onclick="() => OpenModal(branch)"><i class="bi bi-pencil me-2 text-primary"></i>Edit Configuration</button></li>
+                                    <li><hr class="dropdown-divider opacity-50"></li>
+                                    <li><button class="dropdown-item py-2 px-3 text-danger fw-medium" @onclick="() => DeleteBranch(branch.Id)"><i class="bi bi-trash me-2"></i>Delete Branch</button></li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-auto">
+                            <div class="d-flex align-items-center gap-2 mb-4">
+                                <span class="badge rounded-pill px-3 py-2 fw-medium border border-primary border-opacity-10 d-flex align-items-center" style="background: #eff6ff; color: #2563eb; font-size: 0.75rem;">
+                                    <i class="bi bi-bullseye me-2"></i> Radius: <strong>@branch.GeofenceRadius m</strong>
+                                </span>
+                            </div>
+
+                            <a href="https://www.google.com/maps/search/?api=1&query=@branch.Latitude,@branch.Longitude" target="_blank" class="btn btn-light btn-sm w-100 rounded-pill border-0 shadow-sm py-2 fw-bold text-muted transition-all hover-translate-y d-flex align-items-center justify-content-center gap-2" style="background: #f8fafc; border: 1px solid #e2e8f0 !important;">
+                                <i class="bi bi-map"></i> Open in Maps
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@if (showModal)
+{
+    <div class="modal fade show d-block animate-fade-in" tabindex="-1" style="background-color: rgba(5, 39, 103, 0.4); backdrop-filter: blur(8px);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-xl rounded-4 overflow-hidden">
+                <div class="modal-header bg-primary bg-gradient text-white border-0 py-3">
+                    <h5 class="modal-title fw-bold ms-2">
+                        <i class="bi @(editingBranch.Id == null ? "bi-plus-circle" : "bi-pencil-square") me-2"></i>
+                        @(editingBranch.Id == null ? "Add New Branch" : "Edit Branch Properties")
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseModal"></button>
+                </div>
+                <EditForm Model="editingBranch" OnValidSubmit="SaveBranch">
+                    <div class="modal-body p-4 bg-light">
+                        <div class="mb-4">
+                            <label class="form-label form-label-primary">Branch Name</label>
+                            <InputText @bind-Value="editingBranch.Name" class="form-control form-control-premium" placeholder="e.g. Cape Town HQ" required />
+                            <div class="form-text small opacity-75 mt-1">Provide a descriptive name for this office location.</div>
+                        </div>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <label class="form-label form-label-primary">Latitude</label>
+                                <InputNumber @bind-Value="editingBranch.Latitude" class="form-control form-control-premium" step="any" required />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label form-label-primary">Longitude</label>
+                                <InputNumber @bind-Value="editingBranch.Longitude" class="form-control form-control-premium" step="any" required />
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label form-label-primary">Geofence Radius (meters)</label>
+                            <InputNumber @bind-Value="editingBranch.GeofenceRadius" class="form-control form-control-premium" required />
+                            <div class="form-text text-muted small mt-2">
+                                <i class="bi bi-info-circle me-1"></i> Workers must be within this distance to clock in at this location.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-0 p-4 pt-0">
+                        <button type="button" class="btn btn-white rounded-pill px-4 transition-all" @onclick="CloseModal">Cancel</button>
+                        <button type="submit" class="btn btn-primary rounded-pill px-4 shadow-sm transition-all">
+                            <i class="bi bi-check2 me-1"></i> Save Configuration
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Branch>? branches;
+    private bool showModal = false;
+    private Branch editingBranch = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            if (!Auth.IsAuthenticated || !Auth.IsAdmin)
+            {
+                Navigation.NavigateTo("/login");
+                return;
+            }
+            await LoadBranches();
+        }
+    }
+
+    private async Task LoadBranches()
+    {
+        branches = await BranchService.GetAllBranchesAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OpenModal(Branch? branch)
+    {
+        if (branch != null)
+        {
+            editingBranch = new Branch
+            {
+                Id = branch.Id,
+                Name = branch.Name,
+                Latitude = branch.Latitude,
+                Longitude = branch.Longitude,
+                GeofenceRadius = branch.GeofenceRadius
+            };
+        }
+        else
+        {
+            editingBranch = new Branch { GeofenceRadius = 100 };
+        }
+        showModal = true;
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+    }
+
+    private async Task SaveBranch()
+    {
+        if (string.IsNullOrEmpty(editingBranch.Id))
+        {
+            editingBranch.Id = Guid.NewGuid().ToString();
+            await BranchService.CreateBranchAsync(editingBranch);
+        }
+        else
+        {
+            await BranchService.UpdateBranchAsync(editingBranch);
+        }
+
+        CloseModal();
+        await LoadBranches();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task DeleteBranch(string id)
+    {
+        await BranchService.DeleteBranchAsync(id);
+        await LoadBranches();
+        await InvokeAsync(StateHasChanged);
+    }
+}

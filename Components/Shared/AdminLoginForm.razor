@@ -1,0 +1,47 @@
+@* Admin Login Form - Email/password login for admin portal access *@
+
+<form @onsubmit="HandleSubmit" @onsubmit:preventDefault>
+    <div class="mb-4">
+        <label class="form-label small fw-bold text-uppercase letter-spacing-wide text-muted">Admin Identifier</label>
+        <div class="input-group">
+            <span class="input-group-text bg-white border-end-0 rounded-start-4"><i class="bi bi-envelope text-primary"></i></span>
+            <input type="email" class="form-control border-start-0 rounded-end-4 bg-white p-3" @bind="email" placeholder="admin@africanideas.co.za" autocomplete="username" />
+        </div>
+    </div>
+    <div class="mb-4">
+        <label class="form-label small fw-bold text-uppercase letter-spacing-wide text-muted">Secure Password</label>
+        <div class="input-group">
+            <span class="input-group-text bg-white border-end-0 rounded-start-4"><i class="bi bi-key text-primary"></i></span>
+            <input type="password" class="form-control border-start-0 rounded-end-4 bg-white p-3" @bind="password" placeholder="••••••••" autocomplete="current-password" />
+        </div>
+    </div>
+    <div class="mb-3">
+        <button type="submit" class="btn btn-primary btn-lg w-100 rounded-pill shadow-sm py-3 fw-bold" disabled="@IsProcessing">
+            @if (IsProcessing)
+            {
+                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                <span>Verifying Credentials...</span>
+            }
+            else
+            {
+                <span>Access Portal</span>
+            }
+        </button>
+    </div>
+</form>
+
+@code {
+    [Parameter] public bool IsProcessing { get; set; }
+    [Parameter] public EventCallback<(string Email, string Password)> OnSubmit { get; set; }
+
+    private string email = "";
+    private string password = "";
+
+    private async Task HandleSubmit()
+    {
+        if (!string.IsNullOrWhiteSpace(email) && !string.IsNullOrWhiteSpace(password))
+        {
+            await OnSubmit.InvokeAsync((email, password));
+        }
+    }
+}

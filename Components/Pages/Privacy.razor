@@ -1,0 +1,69 @@
+@page "/privacy"
+@using Microsoft.AspNetCore.Authorization
+@attribute [AllowAnonymous]
+
+<PageTitle>Privacy Policy - African Ideas</PageTitle>
+
+<div class="container-fluid min-vh-100 bg-dynamic-mesh py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-10 col-lg-8">
+            <div class="glass-panel p-5 rounded-4 shadow-lg border-0">
+                <div class="text-center mb-5">
+                    <div class="bg-primary bg-opacity-10 rounded-circle p-3 d-inline-flex mb-4">
+                        <i class="bi bi-shield-check fs-1 text-primary"></i>
+                    </div>
+                    <h1 class="fw-bold">Privacy Policy</h1>
+                    <p class="text-muted">Commitment to Data Protection & POPIA Compliance</p>
+                </div>
+
+                <div class="content text-muted leading-relaxed">
+                    <section class="mb-5">
+                        <h4 class="text-dark fw-bold mb-3">1. Information We Collect</h4>
+                        <p>We collect and process personal information for the purpose of employee attendance tracking and workplace security. This includes:</p>
+                        <ul class="list-unstyled ms-3">
+                            <li class="mb-2"><i class="bi bi-check2 text-primary me-2"></i><strong>Biometric Data:</strong> Facial templates for identity verification.</li>
+                            <li class="mb-2"><i class="bi bi-check2 text-primary me-2"></i><strong>Personal Identifiers:</strong> Name, ID/Passport number, and email.</li>
+                            <li class="mb-2"><i class="bi bi-check2 text-primary me-2"></i><strong>Location Data:</strong> Geographical coordinates during clock-in/out events to ensure compliance with geofencing policies.</li>
+                        </ul>
+                    </section>
+
+                    <section class="mb-5">
+                        <h4 class="text-dark fw-bold mb-3">2. How We Use Your Data</h4>
+                        <p>Your data is used solely for:</p>
+                        <ul class="list-unstyled ms-3">
+                            <li class="mb-2"><i class="bi bi-arrow-right text-primary me-2"></i>Verifying identity to prevent proxy clocking.</li>
+                            <li class="mb-2"><i class="bi bi-arrow-right text-primary me-2"></i>Calculating work hours for payroll and reporting.</li>
+                            <li class="mb-2"><i class="bi bi-arrow-right text-primary me-2"></i>Ensuring employee safety and location-aware accountability.</li>
+                        </ul>
+                    </section>
+
+                    <section class="mb-5">
+                        <h4 class="text-dark fw-bold mb-3">3. Data Security</h4>
+                        <p>We implement industry-standard encryption and security measures to protect your data. Biometric templates are stored as mathematical representations and cannot be used to reconstruct your actual face image outside of the authentication context.</p>
+                    </section>
+
+                    <section class="mb-5">
+                        <h4 class="text-dark fw-bold mb-3">4. Your Rights</h4>
+                        <p>Under POPIA, you have the right to access your personal data, request corrections, and withdraw consent. Note that withdrawing consent for biometric processing may require alternative attendance tracking methods as determined by management.</p>
+                    </section>
+                </div>
+
+                <div class="text-center mt-5 pt-4 border-top">
+                    <a href="/" class="btn btn-primary rounded-pill px-5 fw-bold shadow-sm">
+                        Back to Application
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .leading-relaxed {
+        line-height: 1.7;
+    }
+    section h4 {
+        border-left: 4px solid var(--primary);
+        padding-left: 1rem;
+    }
+</style>

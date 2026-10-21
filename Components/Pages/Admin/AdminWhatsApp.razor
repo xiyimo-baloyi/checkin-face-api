@@ -1,0 +1,177 @@
+@page "/admin/whatsapp"
+@using Africanideasfaceapi.Services
+@using Africanideasfaceapi.Models
+@using Africanideasfaceapi.Data
+@using Microsoft.EntityFrameworkCore
+@inject WhatsAppService WhatsAppService
+@inject AuthService Auth
+@inject NavigationManager Navigation
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject IConfiguration Configuration
+
+<PageTitle>WhatsApp Hub - Administration</PageTitle>
+
+<div class="container-fluid mt-4 animate-fade-in pb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex align-items-center gap-3">
+            <div class="bg-white rounded-circle p-1 d-flex align-items-center justify-content-center shadow-sm" style="width: 50px; height: 50px;">
+                <img src="/images/african-ideas-logo.png" alt="Logo" class="w-100" />
+            </div>
+            <div>
+                <h2 class="fw-bold mb-1 text-primary">Communication Hub</h2>
+                <p class="text-muted mb-0">WhatsApp integration monitoring and automated messaging logs.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Live Status -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-4">
+            <div class="glass-panel p-4 rounded-4 shadow-sm border-0 h-100">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="rounded-circle @(isWhatsAppEnabled ? "bg-success" : "bg-danger") bg-opacity-10 p-3 me-3">
+                        <i class="bi bi-whatsapp @(isWhatsAppEnabled ? "text-success" : "text-danger") fs-4"></i>
+                    </div>
+                    <div>
+                        <h6 class="text-muted text-uppercase small fw-bold mb-0">API Status</h6>
+                        <span class="badge @(isWhatsAppEnabled ? "bg-success" : "bg-danger") rounded-pill">@(isWhatsAppEnabled ? "Connected" : "Disabled")</span>
+                    </div>
+                </div>
+                <p class="small text-muted mb-0">@(isWhatsAppEnabled ? "Messages are currently being sent to workers." : "Integration is disabled in system settings.")</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+             <div class="glass-panel p-4 rounded-4 shadow-sm border-0 h-100">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="rounded-circle bg-info bg-opacity-10 p-3 me-3">
+                        <i class="bi bi-broadcast text-info fs-4"></i>
+                    </div>
+                    <div>
+                        <h6 class="text-muted text-uppercase small fw-bold mb-0">Webhook</h6>
+                        <span class="badge bg-info rounded-pill">Active</span>
+                    </div>
+                </div>
+                <p class="small text-muted mb-0">Meta Cloud API is sending verified events to this endpoint.</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+             <div class="glass-panel p-4 rounded-4 shadow-sm border-0 h-100">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="rounded-circle bg-primary bg-opacity-10 p-3 me-3">
+                        <i class="bi bi-chat-dots-fill text-primary fs-4"></i>
+                    </div>
+                    <div>
+                        <h6 class="text-muted text-uppercase small fw-bold mb-0">Active Flows</h6>
+                        <span class="badge bg-primary rounded-pill">@activeSessionsCount</span>
+                    </div>
+                </div>
+                <p class="small text-muted mb-0">Number of ongoing WhatsApp registration sessions.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Session Logs -->
+    <div class="glass-panel p-0 rounded-4 shadow-sm border-0 overflow-hidden">
+        <div class="p-4 border-bottom border-light d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-bold text-primary">Live WhatsApp Sessions</h5>
+            <button class="btn btn-sm btn-light rounded-pill px-3" @onclick="LoadSessions">
+                <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+            </button>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light bg-opacity-50 text-uppercase small">
+                    <tr>
+                        <th class="ps-4">Phone Number</th>
+                        <th>Current State</th>
+                        <th>Last Interaction</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (sessions == null)
+                    {
+                        <tr>
+                            <td colspan="4" class="text-center py-5">
+                                <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading…</span></div>
+                                <p class="text-muted small mt-2 mb-0">Loading WhatsApp sessions…</p>
+                            </td>
+                        </tr>
+                    }
+                    else if (!sessions.Any())
+                    {
+                        <tr>
+                            <td colspan="4" class="text-center py-5 text-muted">
+                                No active or recent WhatsApp sessions found in the database.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var session in sessions)
+                        {
+                            <tr @key="session.Id">
+                                <td class="ps-4 fw-bold">@session.PhoneNumber</td>
+                                <td>
+                                    <span class="badge bg-light text-primary border border-primary border-opacity-25 px-3">@session.CurrentState</span>
+                                </td>
+                                <td>@session.LastInteraction.ToString("yyyy-MM-dd HH:mm")</td>
+                                <td>
+                                    @if(session.IsActive)
+                                    {
+                                        <span class="badge bg-success bg-opacity-10 text-success rounded-pill px-3">Active</span>
+                                    }
+                                    else
+                                    {
+                                         <span class="badge bg-secondary bg-opacity-10 text-muted rounded-pill px-3">Terminated</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<WhatsAppSession>? sessions;
+    private int activeSessionsCount;
+    private bool isWhatsAppEnabled;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            if (!Auth.IsAuthenticated || !Auth.IsAdmin)
+            {
+                Navigation.NavigateTo("/login");
+                return;
+            }
+            
+            isWhatsAppEnabled = Configuration.GetValue<bool>("WhatsAppSettings:Enabled");
+            await LoadSessions();
+        }
+    }
+
+    private async Task LoadSessions()
+    {
+        try
+        {
+            using var context = await DbFactory.CreateDbContextAsync();
+            sessions = await context.WhatsAppSessions
+                .OrderByDescending(s => s.LastInteraction)
+                .Take(50)
+                .ToListAsync();
+            
+            activeSessionsCount = sessions.Count(s => s.IsActive);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading sessions: {ex.Message}");
+            sessions = new List<WhatsAppSession>();
+        }
+    }
+}

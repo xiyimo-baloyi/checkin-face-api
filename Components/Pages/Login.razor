@@ -1,0 +1,683 @@
+@page "/login"
+@using Microsoft.AspNetCore.Authorization
+@attribute [AllowAnonymous]
+@using Africanideasfaceapi.Services
+@using Africanideasfaceapi.Components.Shared
+@using Microsoft.JSInterop
+@using Africanideasfaceapi.Data
+@using Africanideasfaceapi.Hubs
+@using Microsoft.AspNetCore.SignalR
+@inject FaceApiService FaceApiService
+@inject UserService UserService
+@inject AuthService AuthService
+@inject AuditService AuditService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject IConfiguration Configuration
+@inject EmailService EmailService
+@inject TelemetryService TelemetryService
+@inject ILogger<Login> Logger
+@inject IHubContext<AnalyticsHub> HubContext
+@implements IAsyncDisposable
+
+<style>
+    .login-container {
+        min-height: 100vh;
+        background: radial-gradient(circle at 0% 0%, rgba(37, 99, 235, 0.1) 0%, transparent 50%),
+                    radial-gradient(circle at 100% 100%, rgba(30, 64, 175, 0.15) 0%, transparent 50%),
+                    #f8fafc;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .login-container::before {
+        content: '';
+        position: absolute;
+        width: 140%;
+        height: 140%;
+        background: repeating-linear-gradient(
+            -45deg,
+            rgba(30, 64, 175, 0.08) 0,
+            rgba(30, 64, 175, 0.08) 2px,
+            transparent 2px,
+            transparent 14px
+        );
+        opacity: 0.03;
+        top: -20%;
+        left: -20%;
+        transform: rotate(-15deg);
+        pointer-events: none;
+    }
+
+    .premium-card {
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        border-radius: 2.5rem;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1);
+        width: 100%;
+        max-width: 550px;
+        overflow: hidden;
+        transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .premium-card:hover {
+        transform: translateY(-5px);
+    }
+
+    .login-header {
+        background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+        padding: 3rem 2rem;
+        text-align: center;
+        color: white;
+        position: relative;
+    }
+
+    .logo-circle {
+        width: 80px;
+        height: 80px;
+        background: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        padding: 10px;
+    }
+
+    .login-content {
+        padding: 3rem 2.5rem;
+    }
+
+    .btn-admin-toggle {
+        position: absolute;
+        top: 1.5rem;
+        right: 1.5rem;
+        background: rgba(255, 255, 255, 0.2);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.3);
+        color: white;
+        border-radius: 1rem;
+        padding: 0.5rem 1rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        transition: all 0.3s ease;
+    }
+
+    .btn-admin-toggle:hover {
+        background: white;
+        color: #2563eb;
+    }
+
+    .face-login-trigger {
+        background: #f1f5f9;
+        border: 2px dashed #cbd5e1;
+        border-radius: 2rem;
+        padding: 4rem 2rem;
+        text-align: center;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+
+    .face-login-trigger:hover {
+        background: #ebf2ff;
+        border-color: #3b82f6;
+        transform: scale(1.02);
+    }
+
+    .trigger-icon {
+        font-size: 4rem;
+        color: #3b82f6;
+        margin-bottom: 1.5rem;
+        opacity: 0.8;
+    }
+
+    .processing-overlay {
+        text-align: center;
+        padding: 2rem;
+    }
+
+    .spinner-premium {
+        width: 4rem;
+        height: 4rem;
+        border-width: 0.3rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .status-badge {
+        font-size: 0.7rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        padding: 0.5rem 1rem;
+        border-radius: 2rem;
+        margin-bottom: 1rem;
+        display: inline-block;
+    }
+</style>
+
+<div class="login-container animate-fade-in">
+    <div class="premium-card">
+        <div class="login-header">
+            <button class="btn-admin-toggle" @onclick="ToggleAdminLogin">
+                <i class="bi @(showAdminLogin ? "bi-person-bounding-box" : "bi-shield-lock") me-2"></i>
+                @(showAdminLogin ? "Face Login" : "Admin")
+            </button>
+            
+            <div class="logo-circle animate-float">
+                <img src="/images/african-ideas-logo.png" alt="Logo" class="img-fluid" />
+            </div>
+            <h2 class="mb-1 fw-bold">African Ideas</h2>
+            <p class="mb-0 opacity-75 small">Biometric Authentication Portal</p>
+        </div>
+
+        <div class="login-content">
+            <LoginStatusAlert 
+                SuccessMessage="@SuccessMessage" 
+                ErrorMessage="@ErrorMessage" 
+                TechnicalError="@technicalError"
+                ShowWelcomeSubtext="@(loggedInUser != null)"
+                ShowContinueButton="@(loggedInUser != null)"
+                OnContinue="NavigateToCheckIn" />
+
+            @if (locationError != null)
+            {
+                <div class="alert alert-warning border-0 rounded-4 p-4 mb-4 shadow-sm">
+                    <div class="d-flex align-items-center gap-3">
+                        <i class="bi bi-geo-alt-fill fs-3 text-warning"></i>
+                        <div>
+                            <h6 class="fw-bold mb-1">Location Required</h6>
+                            <p class="mb-0 small opacity-75">We need your location for secure verification.</p>
+                            <button class="btn btn-sm btn-warning rounded-pill mt-2 px-3 fw-bold" @onclick="CheckLocationStatus">Enable Now</button>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @if (loggedInUser == null)
+            {
+                @if (showAdminLogin)
+                {
+                    <div class="animate-fade-in">
+                        <AdminLoginForm IsProcessing="@isProcessing" OnSubmit="HandleAdminLogin" />
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center animate-fade-in">
+                        @if (rateLimitCountdown > 0)
+                        {
+                            <div class="p-4 bg-warning bg-opacity-10 text-warning rounded-4 border border-warning border-opacity-20">
+                                <i class="bi bi-clock-history fs-1 mb-3 d-block"></i>
+                                <h6 class="fw-bold">Security Throttling</h6>
+                                <p class="small mb-0">Please wait <strong>@rateLimitCountdown</strong> seconds before retrying.</p>
+                            </div>
+                        }
+                        else if (isProcessing)
+                        {
+                            <div class="processing-overlay">
+                                <div class="spinner-border spinner-premium text-primary" role="status"></div>
+                                <h5 class="fw-bold">Authenticating...</h5>
+                                <p class="text-muted small">Comparing biometric data points</p>
+                            </div>
+                        }
+                        else if (string.IsNullOrEmpty(imagePreview))
+                        {
+                            <div class="face-login-trigger" @onclick="OpenCamera">
+                                <div class="trigger-icon">
+                                    <i class="bi bi-person-bounding-box"></i>
+                                </div>
+                                <h5 class="fw-bold mb-2">Face Recognition</h5>
+                                <p class="text-muted small mb-0">Tap here to start secure identity verification</p>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="text-center">
+                                <div class="position-relative d-inline-block mb-4">
+                                    <img src="@imagePreview" alt="Face Preview" class="rounded-circle border border-4 border-white shadow-lg" style="width: 180px; height: 180px; object-fit: cover;" />
+                                    <div class="position-absolute bottom-0 end-0 bg-success text-white rounded-circle p-2 shadow animate-pulse-soft">
+                                        <i class="bi bi-check2"></i>
+                                    </div>
+                                </div>
+                                <h5 class="fw-bold mb-1">Identity Captured</h5>
+                                <p class="text-muted small mb-4">Proceed to verify your account</p>
+                                
+                                <div class="d-grid gap-3">
+                                    <button type="button" class="btn btn-primary btn-lg rounded-pill py-3 fw-bold shadow-lg" @onclick="HandleLogin">
+                                        <i class="bi bi-shield-check me-2"></i> Confirm Identity
+                                    </button>
+                                    <button type="button" class="btn btn-link text-muted small text-decoration-none" @onclick="ClearImage">
+                                        <i class="bi bi-arrow-repeat me-1"></i> Retake Photo
+                                    </button>
+                                </div>
+                            </div>
+                        }
+
+                        @if (!isProcessing && string.IsNullOrEmpty(imagePreview))
+                        {
+                            <div class="mt-5 border-top pt-4">
+                                <p class="text-muted small mb-3">New member of the team?</p>
+                                <button type="button" class="btn btn-outline-primary rounded-pill px-4 fw-bold w-100" @onclick="NavigateToRegister">Register New Profile</button>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    </div>
+    
+    <div class="position-absolute bottom-0 w-100 text-center p-4 opacity-50">
+        <p class="x-small text-muted mb-0">&copy; @DateTime.Now.Year African Ideas Development. Secure Biometric v3.2</p>
+    </div>
+</div>
+
+@if (showCamera)
+{
+    <BiometricCapture 
+        RequireLiveness="@requireLivenessCheck"
+        MultiFrameEnabled="@multiFrameEnabled"
+        MultiFrameCount="@multiFrameCount"
+        LivenessStartupDelayMs="@livenessStartupDelayMs"
+        LivenessOptions="@livenessOptions"
+        OnPhotoCaptured="OnBiometricCaptured"
+        OnCancelled="OnBiometricCancelled" />
+}
+
+@code {
+    // === UI State ===
+    private string? imagePreview;
+    private string? SuccessMessage;
+    private string? ErrorMessage;
+    private string? technicalError;
+    private string? locationError;
+    private bool showAdminLogin = false;
+    private bool isProcessing = false;
+    private bool showCamera = false;
+    private User? loggedInUser;
+
+    // === Captured Data ===
+    private byte[]? primaryImageBytes;
+    private List<byte[]> loginFrames = new();
+    private Stream? imageStream;
+
+    // === Rate Limiting ===
+    private int rateLimitCountdown = 0;
+    private System.Threading.Timer? rateLimitTimer;
+
+    // === Location JS ===
+    private IJSObjectReference? locationModule;
+    private bool _disposed = false;
+
+    // === Configurable Settings ===
+    private bool requireLivenessCheck = true;
+    private double poseToleranceDegrees = 20;
+    private bool multiFrameEnabled = true;
+    private int multiFrameCount = 2;
+    private int livenessStartupDelayMs = 350;
+    private Dictionary<string, object>? livenessOptions;
+    private const int RecognitionTimeoutSeconds = 15;
+
+    // === Initialization ===
+    protected override void OnInitialized()
+    {
+        try
+        {
+            if (Configuration != null)
+            {
+                if (bool.TryParse(Configuration["LoginSettings:RequireLivenessCheck"], out var requireLiveness))
+                    requireLivenessCheck = requireLiveness;
+
+                if (double.TryParse(Configuration["LoginSettings:PoseToleranceDegrees"], out var tolerance) && tolerance > 0)
+                    poseToleranceDegrees = tolerance;
+
+                if (bool.TryParse(Configuration["LoginSettings:MultiFrameEnabled"], out var multiFrame))
+                    multiFrameEnabled = multiFrame;
+
+                if (int.TryParse(Configuration["LoginSettings:MultiFrameCount"], out var frameCount) && frameCount > 0)
+                    multiFrameCount = Math.Clamp(frameCount, 1, 3);
+
+                if (int.TryParse(Configuration["LoginSettings:LivenessStartupDelayMs"], out var livenessDelay) && livenessDelay >= 0)
+                    livenessStartupDelayMs = livenessDelay;
+
+                livenessOptions = BuildLivenessOptionsFromConfig(Configuration);
+            }
+        }
+        catch { }
+        base.OnInitialized();
+    }
+
+    private static Dictionary<string, object>? BuildLivenessOptionsFromConfig(IConfiguration configuration)
+    {
+        var section = configuration.GetSection("LoginSettings:Liveness");
+        if (!section.Exists()) return null;
+
+        var opts = new Dictionary<string, object>();
+        void AddInt(string key, string configKey)
+        {
+            if (int.TryParse(section[configKey], out var v) && v > 0)
+                opts[key] = v;
+        }
+
+        AddInt("requiredScore", "RequiredScore");
+        AddInt("requiredSustained", "RequiredSustainedFrames");
+        AddInt("sampleIntervalMs", "SampleIntervalMs");
+        AddInt("minElapsedMs", "MinElapsedMs");
+        AddInt("timeoutMs", "TimeoutMs");
+
+        return opts.Count > 0 ? opts : null;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try 
+            { 
+                locationModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/location.js");
+                await CheckLocationStatus();
+            }
+            catch (Exception ex) 
+            {
+                Logger.LogWarning(ex, "Location module init failed");
+            }
+        }
+    }
+
+    private async Task CheckLocationStatus()
+    {
+        locationError = null;
+        if (locationModule != null)
+        {
+            try
+            {
+                await locationModule.InvokeAsync<LocationCoords>("getLocation");
+            }
+            catch
+            {
+                locationError = "Location access required.";
+            }
+        }
+        StateHasChanged();
+    }
+
+    private void ToggleAdminLogin()
+    {
+        showAdminLogin = !showAdminLogin;
+        ErrorMessage = null;
+        SuccessMessage = null;
+        StateHasChanged();
+    }
+
+    private void OpenCamera()
+    {
+        showCamera = true;
+        ErrorMessage = null;
+        StateHasChanged();
+    }
+
+    private void ClearImage()
+    {
+        imageStream?.Dispose();
+        imagePreview = null;
+        primaryImageBytes = null;
+        imageStream = null;
+        loginFrames.Clear();
+        ErrorMessage = null;
+        StateHasChanged();
+    }
+
+    private void NavigateToRegister() => Navigation.NavigateTo("/register");
+    private void NavigateToCheckIn() => Navigation.NavigateTo("/#clock-in");
+
+    private async Task OnBiometricCaptured(BiometricCapture.CaptureResult result)
+    {
+        showCamera = false;
+        imagePreview = result.ImagePreview;
+        primaryImageBytes = result.PrimaryImage;
+        loginFrames = result.Frames;
+        imageStream = new MemoryStream(result.PrimaryImage);
+
+        var capturePayloadBytes = loginFrames.Sum(frame => (long)frame.Length);
+        TelemetryService.TrackFaceLoginStage(
+            "Capture",
+            true,
+            loginFrames.Count,
+            capturePayloadBytes,
+            0);
+        StateHasChanged();
+
+        // Auto-proceed to login - this makes it feel much faster
+        await HandleLogin();
+    }
+
+    private void OnBiometricCancelled()
+    {
+        showCamera = false;
+        StateHasChanged();
+    }
+
+    private async Task HandleAdminLogin((string Email, string Password) credentials)
+    {
+        ErrorMessage = null;
+        isProcessing = true;
+        StateHasChanged();
+
+        var (deviceId, latitude, longitude) = await GetLocationData();
+        if (latitude == null) { 
+            ErrorMessage = "Location required."; 
+            isProcessing = false; 
+            await CheckLocationStatus(); 
+            return; 
+        }
+
+        try
+        {
+            var (success, error) = await AuthService.LoginWithPassword(credentials.Email, credentials.Password, UserService, latitude, longitude);
+            if (success)
+            {
+                var user = AuthService.CurrentUser;
+                SuccessMessage = $"Welcome back, {user?.Name}";
+                AuditService.LogLoginAttempt(user?.Id, credentials.Email, true, "Admin login", latitude, longitude);
+                await AuthService.SaveUserToBrowserAsync(user!);
+                await Task.Delay(800);
+                Navigation.NavigateTo("/admin");
+            }
+            else
+            {
+                ErrorMessage = error ?? "Invalid credentials";
+                AuditService.LogLoginAttempt(null, credentials.Email, false, ErrorMessage, latitude, longitude);
+            }
+        }
+        catch (Exception ex) { ErrorMessage = ex.Message; }
+        finally { isProcessing = false; StateHasChanged(); }
+    }
+
+    private async Task HandleLogin()
+    {
+        if (isProcessing) return;
+        var loginStartedAt = DateTimeOffset.UtcNow;
+        var recognitionStartedAt = DateTimeOffset.UtcNow;
+        SuccessMessage = null;
+        ErrorMessage = null;
+        isProcessing = true;
+        StateHasChanged();
+
+        try
+        {
+            if (imageStream == null && loginFrames.Count == 0)
+            {
+                ErrorMessage = "No image captured.";
+                TelemetryService.TrackFaceLoginStage("Validation", false, 0, 0, 0, error: ErrorMessage);
+                return;
+            }
+
+            (bool isMatch, User? user, double confidence, string? error) recognitionResult;
+
+            try
+            {
+                Task<(bool IsMatch, User? User, double Confidence, string? Error)> recognitionTask;
+
+                if (multiFrameEnabled && loginFrames.Count > 1)
+                {
+                    var streams = loginFrames.Select(b => (Stream)new MemoryStream(b)).ToList();
+                    try
+                    {
+                        recognitionStartedAt = DateTimeOffset.UtcNow;
+                        recognitionTask = FaceApiService.RecognizeFromMultipleFramesAsync(streams, UserService);
+                        var completedTask = await Task.WhenAny(recognitionTask, Task.Delay(TimeSpan.FromSeconds(RecognitionTimeoutSeconds)));
+                        if (completedTask != recognitionTask)
+                        {
+                            ErrorMessage = "Recognition timed out. Please try again.";
+                            return;
+                        }
+
+                        recognitionResult = await recognitionTask;
+                    }
+                    finally
+                    {
+                        foreach (var stream in streams)
+                        {
+                            stream.Dispose();
+                        }
+                    }
+                }
+                else
+                {
+                    imageStream!.Position = 0;
+                    recognitionStartedAt = DateTimeOffset.UtcNow;
+                    recognitionTask = FaceApiService.RecognizeFaceAsync(imageStream, UserService);
+                    var completedTask = await Task.WhenAny(recognitionTask, Task.Delay(TimeSpan.FromSeconds(RecognitionTimeoutSeconds)));
+                    if (completedTask != recognitionTask)
+                    {
+                        ErrorMessage = "Recognition timed out. Please try again.";
+                        return;
+                    }
+
+                    recognitionResult = await recognitionTask;
+                }
+            }
+            catch (Exception ex)
+            {
+                technicalError = ex.Message;
+                ErrorMessage = "Face recognition failed.";
+                TelemetryService.TrackFaceLoginStage("Recognition", false, loginFrames.Count, loginFrames.Sum(f => (long)f.Length), (long)(DateTimeOffset.UtcNow - recognitionStartedAt).TotalMilliseconds, error: ex.Message);
+                return;
+            }
+
+            var (isMatch, user, confidence, error) = recognitionResult;
+
+            if (!isMatch || user == null)
+            {
+                ErrorMessage = FormatErrorMessageByCategory(MapErrorToCategory(error), error);
+                if (error?.Contains("429") == true) StartRateLimitCountdown(60);
+                TelemetryService.TrackFaceLoginStage("Recognition", false, loginFrames.Count, loginFrames.Sum(f => (long)f.Length), (long)(DateTimeOffset.UtcNow - recognitionStartedAt).TotalMilliseconds, error: error);
+                return;
+            }
+
+            TelemetryService.TrackFaceLoginStage("Recognition", true, loginFrames.Count, loginFrames.Sum(f => (long)f.Length), (long)(DateTimeOffset.UtcNow - recognitionStartedAt).TotalMilliseconds, user.Id);
+
+            var (deviceId, latitude, longitude) = await GetLocationData();
+            if (latitude == null)
+            {
+                ErrorMessage = "Location required for security.";
+                await CheckLocationStatus();
+                return;
+            }
+
+            var deviceCheck = await AuthService.ValidateDeviceAsync(user, deviceId, UserService);
+            if (!deviceCheck.Success)
+            {
+                ErrorMessage = $"Device Restricted: {deviceCheck.Error}";
+                TelemetryService.TrackFaceLoginStage("DeviceValidation", false, loginFrames.Count, loginFrames.Sum(f => (long)f.Length), (long)(DateTimeOffset.UtcNow - loginStartedAt).TotalMilliseconds, user.Id, deviceCheck.Error);
+                return;
+            }
+
+            AuthService.Login(user, true, "Face login", latitude, longitude);
+            loggedInUser = user;
+
+            if (multiFrameEnabled && loginFrames.Count > 0 && !string.IsNullOrWhiteSpace(user.PersonId))
+            {
+                _ = FaceApiService.EnrichPersonWithFramesAsync(user.PersonId!, loginFrames, confidence);
+            }
+
+            SuccessMessage = $"Welcome, {user.Name}";
+            await AuthService.SaveUserToBrowserAsync(user);
+            TelemetryService.TrackFaceLoginStage("LoginComplete", true, loginFrames.Count, loginFrames.Sum(f => (long)f.Length), (long)(DateTimeOffset.UtcNow - loginStartedAt).TotalMilliseconds, user.Id);
+            await Task.Delay(800);
+            Navigation.NavigateTo(user.Role == "Admin" ? "/admin" : "/#clock-in");
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Login error: {ex.Message}";
+            TelemetryService.TrackFaceLoginStage("LoginComplete", false, loginFrames.Count, loginFrames.Sum(f => (long)f.Length), (long)(DateTimeOffset.UtcNow - loginStartedAt).TotalMilliseconds, error: ex.Message);
+        }
+        finally { isProcessing = false; StateHasChanged(); }
+    }
+
+    private async Task<(string? DeviceId, double? Latitude, double? Longitude)> GetLocationData()
+    {
+        if (locationModule == null) return (null, null, null);
+        try
+        {
+            var deviceId = await locationModule.InvokeAsync<string>("getDeviceIdentifier");
+            var loc = await locationModule.InvokeAsync<LocationCoords>("getLocation");
+            return (deviceId, loc.Latitude, loc.Longitude);
+        }
+        catch { return (null, null, null); }
+    }
+
+    private string FormatErrorMessageByCategory(string category, string? originalError) => category switch
+    {
+        "Lighting" => "Lighting issue. Please move to a brighter area.",
+        "Pose" => "Look directly at the camera and stay still.",
+        "Occlusion" => "Face covered. Remove glasses/masks.",
+        "RateLimit" => "Too many attempts. Wait a moment.",
+        "NetworkError" => "Connection problem. Check your internet.",
+        "WrongUser" => "Identity not verified. Please ensure you are registered.",
+        _ => originalError ?? "Face not recognized. Try again."
+    };
+
+    private string MapErrorToCategory(string? error)
+    {
+        if (string.IsNullOrEmpty(error)) return "Unknown";
+        var e = error.ToLower();
+        if (e.Contains("light") || e.Contains("dark")) return "Lighting";
+        if (e.Contains("pose") || e.Contains("angle")) return "Pose";
+        if (e.Contains("cover") || e.Contains("occlude")) return "Occlusion";
+        if (e.Contains("429") || e.Contains("limit")) return "RateLimit";
+        if (e.Contains("timeout")) return "NetworkError";
+        if (e.Contains("not recognized")) return "WrongUser";
+        return "SystemError";
+    }
+
+    private void StartRateLimitCountdown(int seconds)
+    {
+        rateLimitCountdown = seconds;
+        rateLimitTimer?.Dispose();
+        rateLimitTimer = new System.Threading.Timer(async _ =>
+        {
+            if (rateLimitCountdown > 0) { rateLimitCountdown--; await InvokeAsync(StateHasChanged); }
+            else { rateLimitTimer?.Dispose(); rateLimitTimer = null; }
+        }, null, 0, 1000);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        rateLimitTimer?.Dispose();
+        imageStream?.Dispose();
+        try { if (locationModule != null) await locationModule.DisposeAsync(); } catch { }
+    }
+
+    public class LocationCoords { public double Latitude { get; set; } public double Longitude { get; set; } }
+}

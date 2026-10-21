@@ -1,0 +1,231 @@
+/* Register Page Mobile Responsive Styles */
+
+/* Form Container */
+.container {
+    max-width: 100%;
+}
+
+/* Card Styling */
+.card {
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+    border-radius: 12px 12px 0 0 !important;
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+}
+
+/* Form Steps */
+.form-step {
+    transition: all 0.3s ease;
+}
+
+/* Camera/Upload Controls */
+.camera-container,
+.upload-container {
+    position: relative;
+    width: 100%;
+    max-width: 640px;
+    margin: 0 auto;
+}
+
+video,
+.camera-preview {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+}
+
+/* Capture Button */
+.capture-btn {
+    min-height: 56px;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+/* Form Fields */
+.form-group {
+    margin-bottom: 1.25rem;
+}
+
+/* Button Groups */
+.button-group {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.button-group .btn {
+    flex: 1 1 auto;
+    min-width: 140px;
+}
+
+/* Validation Messages */
+.validation-message {
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 768px) {
+    /* Container adjustments */
+    .container {
+        padding: 1rem;
+    }
+    
+    /* Card adjustments */
+    .card {
+        margin: 0.5rem 0;
+    }
+    
+    .card-body {
+        padding: 1.25rem;
+    }
+    
+    /* Form layout */
+    .row > div {
+        margin-bottom: 1rem;
+    }
+    
+    /* Camera/Upload */
+    .camera-container,
+    .upload-container {
+        max-width: 100%;
+    }
+    
+    /* Button groups */
+    .button-group {
+        flex-direction: column;
+    }
+    
+    .button-group .btn {
+        width: 100%;
+        min-width: auto;
+    }
+    
+    /* Form controls */
+    .form-control,
+    .form-select {
+        font-size: 16px; /* Prevent zoom on iOS */
+    }
+}
+
+@media (max-width: 576px) {
+    /* Smaller container */
+    .container {
+        padding: 0.75rem;
+    }
+    
+    /* Card adjustments */
+    .card-body {
+        padding: 1rem;
+    }
+    
+    .card-header h3 {
+        font-size: 1.25rem;
+    }
+    
+    /* Form fields */
+    .form-group {
+        margin-bottom: 1rem;
+    }
+    
+    .form-label {
+        font-size: 0.9rem;
+    }
+    
+    /* Capture button */
+    .capture-btn {
+        min-height: 52px;
+        font-size: 1rem;
+    }
+    
+    /* Image preview */
+    .img-thumbnail {
+        max-width: 100%;
+    }
+    
+    /* Alert messages */
+    .alert {
+        font-size: 0.875rem;
+        padding: 0.75rem;
+    }
+    
+    /* Step indicators */
+    .step-indicator {
+        font-size: 0.875rem;
+    }
+}
+
+@media (max-width: 480px) {
+    /* Very small screens */
+    .container {
+        padding: 0.5rem;
+    }
+    
+    .card-body {
+        padding: 0.75rem;
+    }
+    
+    .card-header h3 {
+        font-size: 1.1rem;
+    }
+    
+    /* Form controls */
+    .form-control,
+    .form-select,
+    .form-label {
+        font-size: 0.875rem;
+    }
+    
+    /* Buttons */
+    .btn {
+        font-size: 0.9rem;
+        padding: 0.625rem 1rem;
+    }
+    
+    .capture-btn {
+        min-height: 48px;
+        font-size: 0.95rem;
+    }
+}
+
+/* Landscape orientation on mobile */
+@media (max-width: 768px) and (orientation: landscape) {
+    .camera-container,
+    .upload-container {
+        max-height: 60vh;
+    }
+    
+    video,
+    .camera-preview {
+        max-height: 50vh;
+        object-fit: cover;
+    }
+}
+
+/* Touch device optimizations */
+@media (hover: none) and (pointer: coarse) {
+    /* Larger touch targets */
+    .btn {
+        min-height: 48px;
+        padding: 0.75rem 1.5rem;
+    }
+    
+    .form-control,
+    .form-select {
+        min-height: 48px;
+        padding: 0.75rem 1rem;
+    }
+    
+    /* Easier to tap checkboxes and radios */
+    .form-check-input {
+        width: 1.5rem;
+        height: 1.5rem;
+    }
+    
+    .form-check-label {
+        padding-left: 0.5rem;
+    }
+}

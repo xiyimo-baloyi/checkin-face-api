@@ -1,0 +1,280 @@
+@page "/admin/reports"
+@using Africanideasfaceapi.Services
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Reports - African Ideas Attendance System</PageTitle>
+
+<div class="container-fluid mt-4 animate-fade-in pb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex align-items-center gap-3">
+            <div class="bg-white rounded-circle p-1 d-flex align-items-center justify-content-center shadow-sm" style="width: 50px; height: 50px;">
+                <img src="/images/african-ideas-logo.png" alt="Logo" class="w-100" />
+            </div>
+            <div>
+                <h2 class="fw-bold mb-1 text-primary">Report Center</h2>
+                <p class="text-muted mb-0">Generate PDF and Excel reports for compliance and analytics</p>
+            </div>
+        </div>
+    </div>
+
+    @if (!AuthService.IsAuthenticated || !AuthService.IsAdmin)
+    {
+        <div class="alert alert-danger">
+            <i class="bi bi-shield-exclamation me-2"></i> Access denied. Admin privileges required.
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            <!-- Attendance Report -->
+            <div class="col-lg-6">
+                <form method="get" class="glass-panel p-4 rounded-4 shadow-sm h-100">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="rounded-circle bg-primary bg-opacity-10 p-3 me-3" style="width: 56px; height: 56px;">
+                            <i class="bi bi-calendar-check text-primary fs-4"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">Attendance Report</h5>
+                            <small class="text-muted">Clock-in/out records with hours worked</small>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-uppercase text-muted">Date Range</label>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <input type="date" name="startDate" class="form-control" value="@attendanceStartDate.ToString("yyyy-MM-dd")" required />
+                            </div>
+                            <div class="col-6">
+                                <input type="date" name="endDate" class="form-control" value="@attendanceEndDate.ToString("yyyy-MM-dd")" required />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" formaction="/api/reports/attendance/pdf" class="btn btn-primary rounded-pill px-4 flex-grow-1">
+                            <i class="bi bi-file-earmark-pdf me-2"></i> PDF
+                        </button>
+                        <button type="submit" formaction="/api/reports/attendance/excel" class="btn btn-success rounded-pill px-4 flex-grow-1">
+                            <i class="bi bi-file-earmark-excel me-2"></i> Excel
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Audit Log Report -->
+            <div class="col-lg-6">
+                <form method="get" action="/api/reports/audit/pdf" class="glass-panel p-4 rounded-4 shadow-sm h-100">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="rounded-circle bg-warning bg-opacity-10 p-3 me-3" style="width: 56px; height: 56px;">
+                            <i class="bi bi-shield-lock text-warning fs-4"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">Biometric Audit Log</h5>
+                            <small class="text-muted">Security events and system actions</small>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-uppercase text-muted">Date Range</label>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <input type="date" name="startDate" class="form-control" value="@auditStartDate.ToString("yyyy-MM-dd")" required />
+                            </div>
+                            <div class="col-6">
+                                <input type="date" name="endDate" class="form-control" value="@auditEndDate.ToString("yyyy-MM-dd")" required />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary rounded-pill px-4 flex-grow-1">
+                            <i class="bi bi-file-earmark-pdf me-2"></i> PDF
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- User Directory -->
+            <div class="col-lg-6">
+                <div class="glass-panel p-4 rounded-4 shadow-sm h-100">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="rounded-circle bg-info bg-opacity-10 p-3 me-3" style="width: 56px; height: 56px;">
+                            <i class="bi bi-people text-info fs-4"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">User Directory</h5>
+                            <small class="text-muted">Complete list of registered users</small>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info border-0 bg-info bg-opacity-10 mb-3">
+                        <small><i class="bi bi-info-circle me-1"></i> Exports all active users</small>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <a href="/api/reports/users/excel" class="btn btn-success rounded-pill px-4 flex-grow-1">
+                            <i class="bi bi-file-earmark-excel me-2"></i> Excel
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Access & Identity Report -->
+            <div class="col-lg-6">
+                <form method="get" class="glass-panel p-4 rounded-4 shadow-sm h-100">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="rounded-circle bg-danger bg-opacity-10 p-3 me-3" style="width: 56px; height: 56px;">
+                            <i class="bi bi-shield-lock text-danger fs-4"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">Access & Identity Report</h5>
+                            <small class="text-muted">Biometric login attempts and success rates</small>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-uppercase text-muted">Date Range</label>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <input type="date" name="startDate" class="form-control" value="@accessStartDate.ToString("yyyy-MM-dd")" required />
+                            </div>
+                            <div class="col-6">
+                                <input type="date" name="endDate" class="form-control" value="@accessEndDate.ToString("yyyy-MM-dd")" required />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" formaction="/api/reports/access/pdf" class="btn btn-primary rounded-pill px-4 flex-grow-1">
+                            <i class="bi bi-file-earmark-pdf me-2"></i> PDF
+                        </button>
+                        <button type="submit" formaction="/api/reports/access/excel" class="btn btn-success rounded-pill px-4 flex-grow-1">
+                            <i class="bi bi-file-earmark-excel me-2"></i> Excel
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Quick Actions & Specialized Exports -->
+            <div class="col-lg-6">
+                <div class="glass-panel p-4 rounded-4 shadow-sm h-100">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="rounded-circle bg-success bg-opacity-10 p-3 me-3" style="width: 56px; height: 56px;">
+                            <i class="bi bi-lightning text-success fs-4"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-0">Quick & Specialized Reports</h5>
+                            <small class="text-muted">Pre-configured periods and JSON exports</small>
+                        </div>
+                    </div>
+                    
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                             <button class="btn btn-outline-primary w-100 rounded-pill btn-sm" @onclick='() => GenerateQuickReport("today")'><i class="bi bi-calendar-day me-1"></i> Today</button>
+                        </div>
+                        <div class="col-6">
+                             <button class="btn btn-outline-primary w-100 rounded-pill btn-sm" @onclick='() => GenerateQuickReport("week")'><i class="bi bi-calendar-week me-1"></i> Week</button>
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <a href="/api/export/analytics-report?format=json" target="_blank" class="btn btn-sm btn-outline-info rounded-pill">
+                            <i class="bi bi-graph-up-arrow me-2"></i> Analytics Snapshot (JSON)
+                        </a>
+                        <a href="/api/export/workers?format=csv" target="_blank" class="btn btn-sm btn-outline-success rounded-pill">
+                            <i class="bi bi-people me-2"></i> Full Worker Directory (CSV)
+                        </a>
+                        <a href="/api/export/audit-logs?format=json" target="_blank" class="btn btn-sm btn-outline-secondary rounded-pill">
+                            <i class="bi bi-shield-lock me-2"></i> Audit Logs (JSON)
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (isGenerating)
+        {
+            <div class="position-fixed top-50 start-50 translate-middle" style="z-index: 9999;">
+                <div class="glass-panel p-4 rounded-4 shadow-lg text-center">
+                    <div class="spinner-border text-primary mb-3" role="status"></div>
+                    <p class="mb-0 fw-bold">Generating report...</p>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private DateTime attendanceStartDate = TimeHelper.GetNow().AddDays(-30);
+    private DateTime attendanceEndDate = TimeHelper.GetNow();
+    private DateTime auditStartDate = TimeHelper.GetNow().AddDays(-30);
+    private DateTime auditEndDate = TimeHelper.GetNow();
+    private DateTime accessStartDate = TimeHelper.GetNow().AddDays(-30);
+    private DateTime accessEndDate = TimeHelper.GetNow();
+    private bool isGenerating = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated || !AuthService.IsAdmin)
+        {
+            Navigation.NavigateTo("/login");
+        }
+    }
+
+    private async Task DownloadReport(string reportType, string format)
+    {
+        isGenerating = true;
+        StateHasChanged();
+
+        try
+        {
+            string? url = reportType switch
+            {
+                "attendance" when format == "pdf" => $"/api/reports/attendance/pdf?startDate={attendanceStartDate:yyyy-MM-dd}&endDate={attendanceEndDate:yyyy-MM-dd}",
+                "attendance" when format == "excel" => $"/api/reports/attendance/excel?startDate={attendanceStartDate:yyyy-MM-dd}&endDate={attendanceEndDate:yyyy-MM-dd}",
+                "audit" when format == "pdf" => $"/api/reports/audit/pdf?startDate={auditStartDate:yyyy-MM-dd}&endDate={auditEndDate:yyyy-MM-dd}",
+                "users" when format == "excel" => "/api/reports/users/excel",
+                _ => null
+            };
+
+            if (url != null)
+            {
+                // Use NavigationManager to navigate to the download URL
+                // This preserves authentication cookies
+                Navigation.NavigateTo(url, forceLoad: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error downloading report: {ex.Message}");
+        }
+        finally
+        {
+            // Small delay to allow navigation to start
+            await Task.Delay(500);
+            isGenerating = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task GenerateQuickReport(string period)
+    {
+        var endDate = TimeHelper.GetNow();
+        var startDate = period switch
+        {
+            "today" => TimeHelper.GetNow().Date,
+            "week" => TimeHelper.GetNow().AddDays(-7),
+            "month" => TimeHelper.GetNow().AddDays(-30),
+            _ => TimeHelper.GetNow().AddDays(-30)
+        };
+
+        attendanceStartDate = startDate;
+        attendanceEndDate = endDate;
+        StateHasChanged();
+
+        await DownloadReport("attendance", "pdf");
+    }
+}

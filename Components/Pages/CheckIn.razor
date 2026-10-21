@@ -1,0 +1,26 @@
+@page "/checkin"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Check-In - African Ideas</PageTitle>
+
+<div class="d-flex justify-content-center align-items-center min-vh-50 py-5">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Redirecting…</span>
+    </div>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        Navigation.NavigateTo(AuthService.IsAdmin ? "/admin" : "/#clock-in", replace: true);
+    }
+}

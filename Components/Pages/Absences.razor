@@ -1,0 +1,315 @@
+@page "/absences"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@using Africanideasfaceapi.Models
+@using Africanideasfaceapi.Services
+@using Microsoft.AspNetCore.Components.Forms
+@inject AbsenceService AbsenceService
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>My Absences - Attendance System</PageTitle>
+
+<div class="animate-fade-in pb-4 pb-md-5">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 mb-md-5 border-bottom pb-3 gap-3">
+        <div>
+            <h2 class="fw-bold mb-1 text-dark" style="color: #0f172a !important; font-size: clamp(1.5rem, 4vw, 2rem);">Absence Records</h2>
+            <p class="text-muted mb-0 opacity-75 d-none d-md-block">Review and provide explanations for recorded absences.</p>
+        </div>
+        <button class="btn btn-white rounded-pill px-3 px-md-4 border shadow-sm transition-all hover-translate-y fw-bold" style="font-size: 0.85rem;" @onclick="GoToDashboard">
+            <i class="bi bi-arrow-left me-2"></i> Back to Profile
+        </button>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="d-flex justify-content-center align-items-center" style="min-height: 40vh;">
+            <div class="spinner-border text-primary" style="width: 2rem; height: 2rem; border-width: 3px;"></div>
+        </div>
+    }
+    else if (absenceRecords == null || !absenceRecords.Any())
+    {
+        <div class="glass-panel p-5 rounded-4 shadow-sm text-center" style="background: #dcfce7;">
+            <div class="mb-4">
+                <i class="bi bi-star-fill text-success" style="font-size: 4rem;"></i>
+            </div>
+            <h4 class="fw-bold text-success mb-2">Perfect Attendance!</h4>
+            <p class="text-success mb-0 opacity-75">You have no recorded absences. Keep up the great work!</p>
+        </div>
+    }
+    else
+    {
+        <div class="glass-panel p-0 rounded-4 shadow-sm border-0 overflow-hidden" style="background: white;">
+            <div class="p-4 border-bottom d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold mb-0 text-dark" style="font-size: 1.1rem;">Absence History</h5>
+                <span class="badge rounded-pill px-3 py-1 border text-muted" style="background: #f8fafc; font-size: 0.7rem;">Total: @absenceRecords.Count</span>
+            </div>
+            
+            <!-- Desktop Table View -->
+            <div class="desktop-only-table table-responsive">
+                <table class="table align-middle mb-0">
+                    <thead class="text-uppercase small" style="color: #94a3b8; font-size: 0.65rem; letter-spacing: 0.05rem;">
+                        <tr>
+                            <th class="ps-4 border-0 py-4">Date</th>
+                            <th class="border-0 py-4">Type</th>
+                            <th class="border-0 py-4">Reason / Explanation</th>
+                            <th class="border-0 py-4">Status</th>
+                            <th class="text-end pe-4 border-0 py-4">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody style="font-size: 0.85rem;">
+                        @foreach (var record in absenceRecords)
+                        {
+                            <tr @key="record.Id" class="border-top">
+                                <td class="ps-4 py-3 fw-bold text-dark">@record.Date.ToString("ddd, dd MMM yyyy")</td>
+                                <td class="py-3">
+                                    <span class="badge rounded-pill px-3 py-1" style="@GetTypeBadgeStyle(record.AbsenceType); font-size: 0.7rem;">
+                                        @(string.IsNullOrEmpty(record.AbsenceType) ? "Unexplained" : record.AbsenceType)
+                                    </span>
+                                </td>
+                                <td class="py-3">
+                                    <div class="text-truncate text-muted" style="max-width: 300px;">
+                                        @(string.IsNullOrEmpty(record.Reason) ? "No reason provided yet." : record.Reason)
+                                    </div>
+                                </td>
+                                <td class="py-3">
+                                    <span class="badge rounded-pill px-3 py-1" style="@GetStatusBadgeStyle(record.Status); font-size: 0.7rem;">
+                                        @record.Status
+                                    </span>
+                                </td>
+                                <td class="text-end pe-4 py-3">
+                                    @if (string.IsNullOrEmpty(record.Reason) || record.Status == "Pending")
+                                    {
+                                        <button class="btn btn-primary btn-sm rounded-pill px-4 shadow-sm transition-all hover-translate-y fw-bold" style="background: #2563eb; font-size: 0.75rem;" @onclick="() => EditReason(record)">
+                                            @(string.IsNullOrEmpty(record.Reason) ? "Provide Reason" : "Edit Reason")
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-sm rounded-pill px-4 border" style="background: #f1f5f9; color: #64748b; font-size: 0.75rem;" disabled>Finalized</button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Mobile Card View -->
+            <div class="mobile-only-cards p-3">
+                @foreach (var record in absenceRecords)
+                {
+                    <div class="absence-card-mobile animate-fade-in" @key="@($"card-{record.Id}")">
+                        <div class="absence-card-header">
+                            <div>
+                                <div class="absence-date">@record.Date.ToString("ddd, dd MMM yyyy")</div>
+                                <div class="mt-1">
+                                    <span class="badge rounded-pill px-2 py-1" style="@GetTypeBadgeStyle(record.AbsenceType); font-size: 0.65rem;">
+                                        @(string.IsNullOrEmpty(record.AbsenceType) ? "Unexplained" : record.AbsenceType)
+                                    </span>
+                                    <span class="badge rounded-pill px-2 py-1 ms-1" style="@GetStatusBadgeStyle(record.Status); font-size: 0.65rem;">
+                                        @record.Status
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="absence-card-body">
+                            <div class="absence-reason-text">
+                                @(string.IsNullOrEmpty(record.Reason) ? "No reason provided yet." : record.Reason)
+                            </div>
+                        </div>
+
+                        <div class="absence-card-footer">
+                            @if (string.IsNullOrEmpty(record.Reason) || record.Status == "Pending")
+                            {
+                                <button class="btn btn-primary w-100 rounded-pill py-2 fw-bold" style="background: #2563eb; font-size: 0.85rem;" @onclick="() => EditReason(record)">
+                                    <i class="bi bi-pencil-square me-2"></i>
+                                    @(string.IsNullOrEmpty(record.Reason) ? "Provide Reason" : "Edit Reason")
+                                </button>
+                            }
+                            else
+                            {
+                                <button class="btn w-100 rounded-pill py-2 border" style="background: #f1f5f9; color: #64748b; font-size: 0.85rem;" disabled>
+                                    <i class="bi bi-lock-fill me-2"></i> Finalized
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@if (showReasonModal && selectedRecord != null)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.75); backdrop-filter: blur(10px);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-4">
+                <div class="modal-header py-4 px-4" style="background: #1e293b; border: none;">
+                    <div>
+                        <h5 class="modal-title fw-bold text-white mb-1">Absence Explanation</h5>
+                        <small class="text-white-50">@selectedRecord.Date.ToString("dddd, MMMM dd, yyyy")</small>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    @if (!string.IsNullOrEmpty(modalError))
+                    {
+                        <div class="alert alert-danger border-0 bg-danger bg-opacity-10 text-danger rounded-4 px-3 py-2 mb-3">
+                            <i class="bi bi-exclamation-circle-fill me-2"></i>
+                            <span class="fw-bold">@modalError</span>
+                        </div>
+                    }
+                    
+                    <div class="mb-4">
+                        <label class="form-label-primary">Absence Type</label>
+                        <select class="form-control form-control-premium select-premium" @bind="submissionType">
+                            <option value="Sick">Sick Leave</option>
+                            <option value="Personal">Personal Reasons</option>
+                            <option value="Family">Family Responsibility</option>
+                            <option value="Training">Company Training</option>
+                            <option value="Out">Out Leave</option>
+                            <option value="Other">Other (Specify below)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="form-label-primary">Detailed Reason</label>
+                        <textarea class="form-control form-control-premium" @bind="submissionReason" rows="4" placeholder="Please provide details about your absence..."></textarea>
+                        <div class="form-text small opacity-50 mt-2">This information will be reviewed by your manager.</div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0 p-4">
+                    <button type="button" class="btn btn-white rounded-pill px-4 border shadow-sm transition-all fw-bold" @onclick="CloseModal">Cancel</button>
+                    <button type="button" class="btn btn-primary rounded-pill px-4 shadow-lg transition-all fw-bold" style="background: #2563eb;" @onclick="SubmitReason" disabled="@isSubmitting">
+                        @if (isSubmitting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                            <span>Submitting...</span>
+                        }
+                        else
+                        {
+                            <span>Submit Reason</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Absence>? absenceRecords;
+    private bool isLoading = true;
+    private bool showReasonModal = false;
+    private Absence? selectedRecord;
+    private string submissionReason = string.Empty;
+    private string submissionType = "Sick";
+    private bool isSubmitting = false;
+    private string? modalError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        user = AuthService.CurrentUser;
+        // Don't redirect here, wait for persistence check in OnAfterRender
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            if (user == null)
+            {
+                Navigation.NavigateTo("/login");
+                return;
+            }
+
+            await LoadAbsences();
+            StateHasChanged();
+        }
+    }
+
+    private User? user;
+
+    private async Task LoadAbsences()
+    {
+        if (user == null) return;
+        isLoading = true;
+        absenceRecords = await AbsenceService.GetEmployeeAbsencesAsync(user.Id);
+        isLoading = false;
+    }
+
+    private void EditReason(Absence record)
+    {
+        selectedRecord = record;
+        submissionReason = record.Reason ?? string.Empty;
+        submissionType = record.AbsenceType ?? "Sick";
+        modalError = null;
+        showReasonModal = true;
+    }
+
+    private void CloseModal()
+    {
+        showReasonModal = false;
+        selectedRecord = null;
+    }
+
+    private async Task SubmitReason()
+    {
+        if (string.IsNullOrWhiteSpace(submissionReason))
+        {
+            modalError = "Please provide a reason for your absence.";
+            return;
+        }
+
+        isSubmitting = true;
+        modalError = null;
+
+        try
+        {
+            var success = await AbsenceService.SubmitReasonAsync(selectedRecord!.Id, submissionReason, submissionType);
+            if (success)
+            {
+                showReasonModal = false;
+                await LoadAbsences();
+            }
+            else
+            {
+                modalError = "Failed to update record. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            modalError = "An error occurred: " + ex.Message;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private string GetStatusBadgeStyle(string status) => status switch
+    {
+        "Approved" => "background: #dcfce7; color: #166534;",
+        "Pending" => "background: #fef3c7; color: #92400e;",
+        "Rejected" => "background: #fee2e2; color: #991b1b;",
+        _ => "background: #f1f5f9; color: #64748b;"
+    };
+
+    private string GetTypeBadgeStyle(string? type) => type switch
+    {
+        "Sick" => "background: #dbeafe; color: #1e40af;",
+        "Personal" => "background: #f3e8ff; color: #6b21a8;",
+        "Leave" => "background: #dcfce7; color: #166534;",
+        "Out" => "background: #e0f2fe; color: #0369a1;",
+        "Unexplained" => "background: #fee2e2; color: #991b1b;",
+        _ => "background: #f1f5f9; color: #64748b;"
+    };
+
+    private void GoToDashboard()
+    {
+        Navigation.NavigateTo("/profile");
+    }
+}

@@ -1,0 +1,139 @@
+/* Staff Directory Card View (Mobile) */
+.worker-card-mobile {
+    background: #ffffff;
+    border-radius: 1.25rem;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    border: 1px solid #f1f5f9;
+    transition: transform 0.2s ease;
+}
+
+.worker-card-mobile:active {
+    transform: scale(0.98);
+}
+
+.worker-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.worker-avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #e2e8f0;
+    flex-shrink: 0;
+}
+
+.worker-info {
+    flex-grow: 1;
+    min-width: 0;
+}
+
+.worker-name {
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 0.15rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 1.1rem;
+}
+
+.worker-id {
+    font-size: 0.75rem;
+    color: #64748b;
+    font-family: var(--font-mono, monospace);
+    letter-spacing: 0.05em;
+}
+
+.worker-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    padding: 0.75rem 0;
+    border-top: 1px solid #f1f5f9;
+    margin-bottom: 1rem;
+}
+
+.detail-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.detail-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #94a3b8;
+    margin-bottom: 0.15rem;
+}
+
+.detail-value {
+    font-size: 0.85rem;
+    color: #334155;
+    font-weight: 500;
+}
+
+.worker-actions-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+}
+
+/* Visibility Control */
+.desktop-only-table {
+    display: block;
+}
+
+.mobile-only-cards {
+    display: none;
+}
+
+@media (max-width: 991px) {
+    .desktop-only-table {
+        display: none !important;
+    }
+    
+    .mobile-only-cards {
+        display: block !important;
+    }
+    
+    /* Adjust container padding for edge-to-edge feel */
+    .container {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+    
+    /* Responsive Title and Header */
+    .d-flex.justify-content-between.align-items-center.mb-4 {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 1.5rem;
+    }
+    
+    .d-flex.align-items-center.gap-3 {
+        width: 100%;
+    }
+}
+
+/* Modal and Filter Overrides */
+@media (max-width: 768px) {
+    .glass-panel {
+        padding: 1rem !important;
+    }
+    
+    .form-floating > label {
+        font-size: 0.8rem;
+    }
+    
+    /* Modal Fullscreen on Mobile */
+    .modal-dialog.modal-lg {
+        max-width: 100%;
+        margin: 0.5rem;
+    }
+}

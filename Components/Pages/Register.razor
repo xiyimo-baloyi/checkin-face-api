@@ -1,0 +1,531 @@
+@page "/register"
+@using Microsoft.AspNetCore.Authorization
+@attribute [AllowAnonymous]
+@using Africanideasfaceapi.Models
+@using Africanideasfaceapi.Services
+@using Microsoft.JSInterop
+@using System.Threading
+@using Microsoft.AspNetCore.Components.Forms
+@using Africanideasfaceapi.Services.Interfaces
+@using Africanideasfaceapi.Hubs
+@using Microsoft.AspNetCore.SignalR
+@using Africanideasfaceapi.Components.Shared
+@inject IBiometricIdentityService BiometricIdentityService
+@inject UserService UserService
+@inject FileStorageService FileStorageService
+@inject AuditService AuditService
+@inject ConsentService ConsentService
+@inject IdCardVerificationService IdCardVerificationService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject IHttpContextAccessor HttpContextAccessor
+@inject EmailService EmailService
+@inject ILogger<Register> Logger
+@inject IHubContext<AnalyticsHub> HubContext
+@implements IAsyncDisposable
+
+<style>
+    .register-container {
+        min-height: 100vh;
+        background: radial-gradient(circle at 100% 0%, rgba(37, 99, 235, 0.1) 0%, transparent 50%),
+                    radial-gradient(circle at 0% 100%, rgba(30, 64, 175, 0.15) 0%, transparent 50%),
+                    #f8fafc;
+        padding: 3rem 1rem;
+        position: relative;
+        overflow-x: hidden;
+    }
+
+    .register-container::before {
+        content: '';
+        position: absolute;
+        width: 140%;
+        height: 140%;
+        background: repeating-linear-gradient(
+            45deg,
+            rgba(37, 99, 235, 0.08) 0,
+            rgba(37, 99, 235, 0.08) 2px,
+            transparent 2px,
+            transparent 14px
+        );
+        opacity: 0.02;
+        top: -20%;
+        left: -20%;
+        transform: rotate(15deg);
+        pointer-events: none;
+    }
+
+    .register-card {
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(25px);
+        -webkit-backdrop-filter: blur(25px);
+        border: 1px solid rgba(255, 255, 255, 0.5);
+        border-radius: 2.5rem;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.08);
+        overflow: hidden;
+        max-width: 850px;
+        margin: 0 auto;
+    }
+
+    .register-header {
+        background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+        padding: 2.5rem;
+        color: white;
+    }
+
+    .step-indicator {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 1.5rem;
+    }
+
+    .step-dot {
+        height: 6px;
+        flex: 1;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 10px;
+        transition: all 0.4s ease;
+    }
+
+    .step-dot.active {
+        background: white;
+        box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+    }
+
+    .form-section {
+        padding: 3rem;
+    }
+
+    .document-upload-zone {
+        border: 2px dashed #cbd5e1;
+        border-radius: 2rem;
+        padding: 3rem 2rem;
+        text-align: center;
+        transition: all 0.3s ease;
+        background: #f8fafc;
+        cursor: pointer;
+    }
+
+    .document-upload-zone:hover {
+        border-color: #3b82f6;
+        background: #f1f5f9;
+    }
+
+    .processing-loader {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(15, 23, 42, 0.8);
+        backdrop-filter: blur(10px);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        color: white;
+    }
+
+    .camera-box {
+        border-radius: 2rem;
+        overflow: hidden;
+        position: relative;
+        background: #000;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+    }
+</style>
+
+<div class="register-container animate-fade-in">
+    @if (isProcessing)
+    {
+        <div class="processing-loader">
+            <div class="spinner-border text-primary mb-4" style="width: 4rem; height: 4rem; border-width: 0.4rem;"></div>
+            <h4 class="fw-bold mb-2">@processingMessage</h4>
+            <p class="opacity-75">Securing your identity profile...</p>
+        </div>
+    }
+
+    <div class="register-card">
+        <div class="register-header">
+            <div class="d-flex align-items-center gap-3">
+                <div class="bg-white rounded-circle p-1" style="width: 45px; height: 45px;">
+                    <img src="/images/african-ideas-logo.png" alt="Logo" class="img-fluid" />
+                </div>
+                <div>
+                    <h4 class="mb-0 fw-bold">Enrollment Center</h4>
+                    <p class="mb-0 small opacity-75">Step @currentStep: @(currentStep == 1 ? "Personal Info" : currentStep == 2 ? "Identity Document" : "Verification")</p>
+                </div>
+            </div>
+            
+            <div class="step-indicator">
+                <div class="step-dot @(currentStep >= 1 ? "active" : "")"></div>
+                <div class="step-dot @(currentStep >= 2 ? "active" : "")"></div>
+                <div class="step-dot @(currentStep >= 3 ? "active" : "")"></div>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <LoginStatusAlert SuccessMessage="@SuccessMessage" ErrorMessage="@ErrorMessage" />
+
+            @if (currentStep == 1)
+            {
+                <EditForm Model="@model" OnValidSubmit="NextStep">
+                    <DataAnnotationsValidator />
+                    <div class="animate-fade-in">
+                        <div class="row g-4">
+                            <div class="col-md-12 mb-2">
+                                <h5 class="fw-bold">Profile Details</h5>
+                                <p class="text-muted small">Enter your official information exactly as it appears on your document.</p>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label-primary">Country</label>
+                                <InputSelect @bind-Value="model.Country" class="form-select form-control-premium">
+                                    @foreach (var country in Africanideasfaceapi.Data.Countries.List)
+                                    {
+                                        <option value="@country">@country</option>
+                                    }
+                                </InputSelect>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label-primary">ID / Passport Number</label>
+                                <InputText @bind-Value="model.IdNumber" class="form-control form-control-premium" placeholder="Official Identity Number" />
+                                <ValidationMessage For="@(() => model.IdNumber)" class="small text-danger mt-1" />
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label-primary">First Name</label>
+                                <InputText @bind-Value="model.Name" class="form-control form-control-premium" placeholder="Legal First Name" />
+                                <ValidationMessage For="@(() => model.Name)" class="small text-danger mt-1" />
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label-primary">Surname</label>
+                                <InputText @bind-Value="model.Surname" class="form-control form-control-premium" placeholder="Legal Last Name" />
+                                <ValidationMessage For="@(() => model.Surname)" class="small text-danger mt-1" />
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label-primary">Email Address</label>
+                                <InputText type="email" @bind-Value="model.Email" class="form-control form-control-premium" placeholder="yourname@company.co.za" />
+                                <ValidationMessage For="@(() => model.Email)" class="small text-danger mt-1" />
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label-primary">Date of Birth</label>
+                                <InputDate @bind-Value="model.DateOfBirth" class="form-control form-control-premium" />
+                                <ValidationMessage For="@(() => model.DateOfBirth)" class="small text-danger mt-1" />
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end mt-5">
+                            <button type="submit" class="btn btn-primary btn-lg rounded-pill px-5 fw-bold shadow-lg py-3">
+                                Identity Scan <i class="bi bi-arrow-right ms-2"></i>
+                            </button>
+                        </div>
+                    </div>
+                </EditForm>
+            }
+            else if (currentStep == 2)
+            {
+                <div class="animate-fade-in">
+                    <div class="mb-4">
+                        <h5 class="fw-bold">Document Verification</h5>
+                        <p class="text-muted small">Position your ID or Passport clearly in the frame.</p>
+                    </div>
+
+                    @if (string.IsNullOrEmpty(documentPreview))
+                    {
+                        <div class="mb-4">
+                            <label class="form-label-primary">Document Type</label>
+                            <select class="form-select form-control-premium mb-4" @bind="documentType">
+                                <option value="">Select Document...</option>
+                                <option value="SAID">South African ID</option>
+                                <option value="Passport">Passport</option>
+                            </select>
+
+                            @if (!showDocCamera)
+                            {
+                                <div class="document-upload-zone" @onclick="StartDocCamera">
+                                    <i class="bi bi-card-heading fs-1 text-primary mb-3 d-block opacity-50"></i>
+                                    <h6 class="fw-bold">Launch Scanner</h6>
+                                    <p class="text-muted small">Use your camera for high-accuracy verification</p>
+                                    
+                                    <div class="mt-4 pt-4 border-top">
+                                        <p class="small text-muted mb-3">Or upload a clear photo</p>
+                                        <label class="btn btn-white rounded-pill px-4 border shadow-sm fw-bold">
+                                            <i class="bi bi-upload me-2"></i> Choose File
+                                            <InputFile OnChange="HandleDocumentUpload" class="d-none" accept="image/*" />
+                                        </label>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="camera-box">
+                                    <video id="video-doc" autoplay playsinline class="w-100" style="aspect-ratio: 4/3; object-fit: cover;"></video>
+                                    <canvas id="canvas-doc" class="d-none"></canvas>
+                                    
+                                    <div class="position-absolute bottom-0 w-100 p-4 d-flex justify-content-center gap-3 bg-gradient-dark">
+                                        <button class="btn btn-danger rounded-circle p-3" @onclick="StopDocCamera">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                        <button class="btn btn-primary rounded-circle p-4 shadow-lg border border-3 border-white" @onclick="CaptureDocumentPhoto" style="margin-top: -2rem;">
+                                            <i class="bi bi-camera-fill fs-4"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center">
+                            <img src="@documentPreview" class="rounded-4 shadow-lg mb-4 border border-4 border-white" style="max-width: 100%; max-height: 300px;" />
+                            <div class="d-grid gap-3 max-width-400 mx-auto">
+                                <button class="btn btn-primary btn-lg rounded-pill py-3 fw-bold" @onclick="NextStep">Confirm & Continue</button>
+                                <button class="btn btn-link text-muted small" @onclick="ClearDocument">Retake Photo</button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else if (currentStep == 3)
+            {
+                <div class="animate-fade-in">
+                    <div class="mb-4">
+                        <h5 class="fw-bold">Final Review</h5>
+                        <p class="text-muted small">Please verify your details and provide biometric consent.</p>
+                    </div>
+
+                    <div class="bg-light bg-opacity-50 p-4 rounded-4 mb-4 border">
+                        <div class="row g-3">
+                            <div class="col-6"><small class="text-muted d-block">Full Name</small> <strong>@model.Name @model.Surname</strong></div>
+                            <div class="col-6"><small class="text-muted d-block">ID Number</small> <strong>@model.IdNumber</strong></div>
+                            <div class="col-12"><small class="text-muted d-block">Email</small> <strong>@model.Email</strong></div>
+                        </div>
+                    </div>
+
+                    <div class="bg-primary bg-opacity-5 p-4 rounded-4 mb-5">
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="consent1" @bind="hasConsentDataCollection" />
+                            <label class="form-check-label small" for="consent1">I authorize the secure collection of my identity data.</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="consent2" @bind="hasConsentFaceRecognition" />
+                            <label class="form-check-label small" for="consent2">I consent to facial biometric authentication.</label>
+                        </div>
+                    </div>
+
+                    <div class="d-flex flex-column flex-md-row justify-content-between gap-3">
+                        <button class="btn btn-white rounded-pill px-4 border fw-bold order-2 order-md-1" @onclick="PreviousStep">Go Back</button>
+                        <button class="btn btn-primary btn-lg rounded-pill px-5 shadow-lg fw-bold py-3 order-1 order-md-2" @onclick="HandleRegister" disabled="@(!hasConsentDataCollection || !hasConsentFaceRecognition)">
+                            Finalize Registration <i class="bi bi-shield-check ms-2"></i>
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+    
+    <div class="text-center mt-5">
+        <button class="btn btn-link text-muted text-decoration-none" @onclick="NavigateToLogin">
+            <i class="bi bi-arrow-left me-2"></i> Back to Login Gateway
+        </button>
+    </div>
+</div>
+
+@code {
+    private RegisterModel model = new();
+    private string? SuccessMessage;
+    private string? ErrorMessage;
+    private bool isProcessing;
+    private string processingMessage = "Processing...";
+
+    private IJSObjectReference? jsModule;
+    private int currentStep = 1;
+    
+    private string documentType = "";
+    private string? documentPreview;
+    private Stream? documentStream;
+    private bool showDocCamera;
+    
+    private string? currentPersonId;
+    private bool hasConsentDataCollection = false;
+    private bool hasConsentFaceRecognition = false;
+
+    public async ValueTask DisposeAsync()
+    {
+        try { if (jsModule != null) await jsModule.DisposeAsync(); }
+        catch (JSDisconnectedException) { }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            jsModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", $"./js/camera.js?v={DateTime.Now.Ticks}");
+        }
+    }
+
+    private void NavigateToLogin() => Navigation.NavigateTo("/login");
+    private void PreviousStep() { if (currentStep > 1) currentStep--; StateHasChanged(); }
+
+    private void NextStep()
+    {
+        ErrorMessage = null;
+        if (currentStep == 1)
+        {
+            if (string.IsNullOrEmpty(model.Name) || string.IsNullOrEmpty(model.Email))
+            {
+                ErrorMessage = "Please complete all required fields.";
+                return;
+            }
+        }
+        currentStep++;
+        StateHasChanged();
+    }
+
+    private void ClearDocument()
+    {
+        documentPreview = null;
+        documentStream?.Dispose();
+        documentStream = null;
+        StateHasChanged();
+    }
+
+    private async Task StartDocCamera()
+    {
+        showDocCamera = true;
+        StateHasChanged();
+        await Task.Delay(300);
+        if (jsModule != null)
+        {
+            try { await jsModule.InvokeAsync<bool>("startCamera", "video-doc", "environment"); }
+            catch { ErrorMessage = "Could not access camera."; showDocCamera = false; }
+        }
+        StateHasChanged();
+    }
+
+    private async Task StopDocCamera()
+    {
+        if (jsModule != null) await jsModule.InvokeVoidAsync("stopCamera", "video-doc");
+        showDocCamera = false;
+        StateHasChanged();
+    }
+
+    private async Task CaptureDocumentPhoto()
+    {
+        if (jsModule == null || isProcessing) return;
+        isProcessing = true;
+        processingMessage = "Analyzing Document...";
+        StateHasChanged();
+
+        try
+        {
+            var imageDataUrl = await jsModule.InvokeAsync<string>("capturePhoto", "video-doc", "canvas-doc");
+            var imageBytes = Convert.FromBase64String(imageDataUrl.Split(',')[1]);
+            
+            var (isEnrolled, personId, enrollError, rotatedBytes) = await BiometricIdentityService.EnrollFaceFromDocumentAsync(new MemoryStream(imageBytes), $"{model.Name} {model.Surname}");
+            
+            if (isEnrolled && !string.IsNullOrEmpty(personId))
+            {
+                currentPersonId = personId;
+                documentPreview = rotatedBytes != null ? $"data:image/jpeg;base64,{Convert.ToBase64String(rotatedBytes)}" : imageDataUrl;
+                documentStream = new MemoryStream(rotatedBytes ?? imageBytes);
+                await StopDocCamera();
+                NextStep();
+            }
+            else ErrorMessage = enrollError ?? "Face not found on document.";
+        }
+        catch (Exception ex) { ErrorMessage = ex.Message; }
+        finally { isProcessing = false; StateHasChanged(); }
+    }
+
+    private async Task HandleDocumentUpload(InputFileChangeEventArgs e)
+    {
+        if (string.IsNullOrEmpty(documentType)) { ErrorMessage = "Select document type first."; return; }
+        
+        isProcessing = true;
+        processingMessage = "Processing Image...";
+        StateHasChanged();
+
+        try
+        {
+            var file = e.File;
+            using var stream = file.OpenReadStream(5 * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            var imageBytes = ms.ToArray();
+
+            var (isEnrolled, personId, enrollError, rotatedBytes) = await BiometricIdentityService.EnrollFaceFromDocumentAsync(new MemoryStream(imageBytes), $"{model.Name} {model.Surname}");
+            
+            if (isEnrolled)
+            {
+                currentPersonId = personId;
+                documentPreview = $"data:image/jpeg;base64,{Convert.ToBase64String(rotatedBytes ?? imageBytes)}";
+                documentStream = new MemoryStream(rotatedBytes ?? imageBytes);
+                NextStep();
+            }
+            else ErrorMessage = enrollError;
+        }
+        catch (Exception ex) { ErrorMessage = ex.Message; }
+        finally { isProcessing = false; StateHasChanged(); }
+    }
+
+    private async Task HandleRegister()
+    {
+        isProcessing = true;
+        processingMessage = "Creating Identity...";
+        StateHasChanged();
+
+        try
+        {
+            // Use existing logic but streamlined
+            byte[]? optimizedBytes = null;
+            if (documentStream != null)
+            {
+                documentStream.Position = 0;
+                var raw = new byte[documentStream.Length];
+                await documentStream.ReadAsync(raw, 0, (int)documentStream.Length);
+                optimizedBytes = await BiometricIdentityService.OptimizeImageForStorageAsync(raw, 600, 600, 70);
+            }
+
+            var newUser = new User
+            {
+                Id = Guid.NewGuid().ToString(),
+                Name = model.Name,
+                Surname = model.Surname,
+                Email = model.Email,
+                IdNumber = model.IdNumber,
+                DateOfBirth = model.DateOfBirth,
+                Country = model.Country,
+                Role = "Worker",
+                PersonId = currentPersonId,
+                ImageBase64 = optimizedBytes != null ? Convert.ToBase64String(optimizedBytes) : null,
+                RegisteredDate = DateTime.UtcNow
+            };
+
+            await UserService.CreateUserAsync(newUser);
+            AuditService.LogUserRegistration(newUser.Id, newUser.Email, "Document");
+            
+            SuccessMessage = "Registration complete! Redirecting to login...";
+            StateHasChanged();
+            await Task.Delay(2000);
+            Navigation.NavigateTo("/login");
+        }
+        catch (Exception ex) { ErrorMessage = ex.Message; }
+        finally { isProcessing = false; StateHasChanged(); }
+    }
+
+    public class RegisterModel
+    {
+        public string Name { get; set; } = "";
+        public string Surname { get; set; } = "";
+        public string Email { get; set; } = "";
+        public string IdNumber { get; set; } = "";
+        public string Country { get; set; } = "South Africa";
+        public DateTime DateOfBirth { get; set; } = DateTime.Now.AddYears(-20);
+    }
+}

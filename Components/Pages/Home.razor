@@ -1,0 +1,529 @@
+@page "/"
+@using Microsoft.AspNetCore.Authorization
+@attribute [AllowAnonymous]
+@using Africanideasfaceapi.Services
+@using Africanideasfaceapi.Models
+@using Africanideasfaceapi.Helpers
+@using Africanideasfaceapi.Components.Shared
+@using Microsoft.AspNetCore.SignalR.Client
+@implements IAsyncDisposable
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@inject LeaveService LeaveService
+@inject AbsenceService AbsenceService
+@inject CorrectionService CorrectionService
+@inject AnalyticsService AnalyticsService
+@inject RemoteWorkService RemoteWorkService
+@inject AttendanceService AttendanceService
+@inject UserService UserService
+@inject IJSRuntime JS
+
+<PageTitle>African Ideas - Attendance System</PageTitle>
+
+@if (isLoading)
+{
+    <div class="d-flex justify-content-center align-items-center" style="min-height: 60vh;">
+        <div class="spinner-border text-primary" role="status" style="width: 2rem; height: 2rem; border-width: 3px;">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else if (!isAuthenticated)
+{
+    <!-- Guest Landing Page (Attendance Evolved) -->
+    <div class="container py-3 py-md-5 animate-fade-in min-vh-100 d-flex align-items-center" style="background: transparent;">
+        <div class="row w-100 align-items-center">
+            <div class="col-lg-6 mb-4 mb-lg-0 text-center text-lg-start">
+                <div class="mb-3 mb-md-4 d-flex align-items-center gap-2 gap-md-3 justify-content-center justify-content-lg-start flex-wrap">
+                    <div class="bg-white rounded-circle p-2 d-flex align-items-center justify-content-center shadow-sm" style="width: 48px; height: 48px;">
+                        <img src="/images/african-ideas-logo.png" alt="Logo" class="w-100" />
+                    </div>
+                    <span class="badge rounded-pill px-3 py-2 small fw-bold text-uppercase letter-spacing-wide border" style="background: #f1f5f9; color: #475569; font-size: 0.6rem;">
+                        Biometric Attendance
+                    </span>
+                </div>
+                <h1 class="fw-bold text-dark mb-3 mb-md-4 lh-1" style="font-size: clamp(2rem, 10vw, 4.5rem); letter-spacing: -2px;">
+                    Attendance <br class="d-none d-md-block" />
+                    <span class="text-primary">Evolved.</span>
+                </h1>
+                <p class="lead text-muted mb-4 mb-md-5 opacity-75 pe-lg-5" style="font-size: clamp(0.9rem, 2.5vw, 1.15rem); line-height: 1.6;">
+                    The definitive biometric ecosystem for African enterprise. Secure, instantaneous, and mathematically precise.
+                </p>
+                
+                <div class="d-flex flex-column flex-sm-row gap-3 mt-4 justify-content-center justify-content-lg-start">
+                    <button class="btn btn-primary btn-lg shadow-lg px-4 px-md-5 py-3 rounded-pill fw-bold transition-all hover-translate-y" @onclick="NavigateToLogin" style="background: #1e40af; border: none; font-size: 0.9rem;">
+                        Access Gateway
+                    </button>
+                    <button class="btn btn-white btn-lg px-4 px-md-5 py-3 rounded-pill fw-bold border shadow-sm transition-all text-primary" @onclick="NavigateToRegister" style="font-size: 0.9rem;">
+                        Join System
+                    </button>
+                </div>
+            </div>
+            
+            <div class="col-lg-6">
+                <div class="row g-3 g-md-4 justify-content-center">
+                    <div class="col-6 col-md-6">
+                        <div class="glass-panel p-3 p-md-4 rounded-4 shadow-sm h-100 border-0" style="background: white;">
+                            <div class="rounded-circle d-flex align-items-center justify-content-center mb-3 mb-md-4 shadow-inner" style="width: 40px; height: 40px; background: #e2e8f0;">
+                                <i class="bi bi-person-badge text-muted fs-4"></i>
+                            </div>
+                            <h6 class="fw-bold text-dark mb-2" style="font-size: clamp(0.9rem, 2vw, 1rem);">Biometric ID</h6>
+                            <p class="text-muted small mb-0 opacity-75" style="font-size: clamp(0.75rem, 1.5vw, 0.85rem);">99.9% accuracy in facial identification across all environments.</p>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-6">
+                        <div class="glass-panel p-3 p-md-4 rounded-4 shadow-lg h-100 border-0" style="background: #2563eb;">
+                            <div class="rounded-circle d-flex align-items-center justify-content-center mb-3 mb-md-4" style="width: 40px; height: 40px; background: white;">
+                                <i class="bi bi-cloud-arrow-up text-primary fs-4"></i>
+                            </div>
+                            <h6 class="fw-bold text-white mb-2" style="font-size: clamp(0.9rem, 2vw, 1rem);">Real-time Sync</h6>
+                            <p class="text-white text-opacity-75 small mb-0" style="font-size: clamp(0.75rem, 1.5vw, 0.85rem);">Instantaneous propagation of attendance data to decentralized registries.</p>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-6">
+                        <div class="glass-panel p-3 p-md-4 rounded-4 shadow-sm h-100 border-0" style="background: white;">
+                             <div class="rounded-circle d-flex align-items-center justify-content-center mb-3 mb-md-4 shadow-inner" style="width: 40px; height: 40px; background: #dbeafe;">
+                                <i class="bi bi-geo-alt text-primary fs-4"></i>
+                            </div>
+                            <h6 class="fw-bold text-dark mb-2" style="font-size: clamp(0.9rem, 2vw, 1rem);">Spatial Logic</h6>
+                            <p class="text-muted small mb-0 opacity-75" style="font-size: clamp(0.75rem, 1.5vw, 0.85rem);">Advanced geofencing ensures operational compliance at specific coordinates.</p>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-6">
+                        <div class="glass-panel p-3 p-md-4 rounded-4 shadow-sm h-100 border-0" style="background: white;">
+                            <div class="rounded-circle d-flex align-items-center justify-content-center mb-3 mb-md-4 shadow-inner" style="width: 40px; height: 40px; background: #dcfce7;">
+                                <i class="bi bi-graph-up-arrow text-success fs-4"></i>
+                            </div>
+                            <h6 class="fw-bold text-dark mb-2" style="font-size: clamp(0.9rem, 2vw, 1rem);">Deep Insights</h6>
+                            <p class="text-muted small mb-0 opacity-75" style="font-size: clamp(0.75rem, 1.5vw, 0.85rem);">Automated payroll integration and growth trajectory analytics.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <!-- Authenticated Dashboard -->
+    <div class="animate-fade-in py-2">
+        <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between mb-4 gap-2">
+            <div>
+                <h1 class="fw-bold mb-1 text-dark" style="font-size: clamp(1.25rem, 5vw, 1.5rem);">Dashboard</h1>
+                <p class="text-muted mb-0 small">Hello, <span class="fw-semibold text-dark">@currentUser?.Name</span> · @TimeHelper.GetNow().ToString("dddd, d MMM yyyy")</p>
+            </div>
+            @if (lastUpdateMessage != null)
+            {
+                <div class="text-success small fw-semibold">
+                    <i class="bi bi-broadcast me-1"></i>@lastUpdateMessage
+                </div>
+            }
+        </div>
+
+        <!-- Status Grid -->
+        @if (isAdmin)
+        {
+            <div class="row row-cols-2 row-cols-md-3 row-cols-lg-5 g-2 g-md-3 mb-4">
+                <div class="col">
+                    <div class="glass-panel p-3 rounded-4 shadow-sm border-0 h-100 transition-all hover-translate-y cursor-pointer position-relative" @onclick='() => NavigateTo("admin/leave")'>
+                        <h6 class="text-muted text-uppercase small fw-bold mb-1" style="font-size: 0.65rem;">Pending leave</h6>
+                        <h4 class="fw-bold mb-0 text-dark">@pendingLeaveCount</h4>
+                        @if (pendingLeaveCount > 0) { <span class="position-absolute top-0 end-0 m-2 badge rounded-pill bg-danger" style="width: 8px; height: 8px; padding: 0;"></span> }
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="glass-panel p-3 rounded-4 shadow-sm border-0 h-100 transition-all hover-translate-y cursor-pointer position-relative" @onclick='() => NavigateTo("admin/absences")'>
+                        <h6 class="text-muted text-uppercase small fw-bold mb-1" style="font-size: 0.65rem;">Absences</h6>
+                        <h4 class="fw-bold mb-0 text-dark">@pendingAbsenceCount</h4>
+                        @if (pendingAbsenceCount > 0) { <span class="position-absolute top-0 end-0 m-2 badge rounded-pill bg-warning" style="width: 8px; height: 8px; padding: 0;"></span> }
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="glass-panel p-3 rounded-4 shadow-sm border-0 h-100 transition-all hover-translate-y cursor-pointer position-relative" @onclick='() => NavigateTo("admin/corrections")'>
+                        <h6 class="text-muted text-uppercase small fw-bold mb-1" style="font-size: 0.65rem;">Corrections</h6>
+                        <h4 class="fw-bold mb-0 text-dark">@pendingCorrectionCount</h4>
+                        @if (pendingCorrectionCount > 0) { <span class="position-absolute top-0 end-0 m-2 badge rounded-pill bg-primary" style="width: 8px; height: 8px; padding: 0;"></span> }
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="glass-panel p-3 rounded-4 shadow-sm border-0 h-100 transition-all hover-translate-y cursor-pointer position-relative" @onclick='() => NavigateTo("admin/remote-requests")'>
+                        <h6 class="text-muted text-uppercase small fw-bold mb-1" style="font-size: 0.65rem;">Remote work</h6>
+                        <h4 class="fw-bold mb-0 text-dark">@pendingRemoteCount</h4>
+                        @if (pendingRemoteCount > 0) { <span class="position-absolute top-0 end-0 m-2 badge rounded-pill bg-info" style="width: 8px; height: 8px; padding: 0;"></span> }
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="glass-panel p-3 rounded-4 shadow-sm border-0 h-100 transition-all hover-translate-y cursor-pointer text-white" style="background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);" @onclick='() => NavigateTo("admin/deep-analytics")'>
+                        <h6 class="text-white text-uppercase small fw-bold mb-1 opacity-75" style="font-size: 0.65rem;">System health</h6>
+                        <h4 class="fw-bold mb-0">@systemHealthScore.ToString("F0")%</h4>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel p-3 p-md-4 rounded-4 shadow-sm mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold text-dark mb-0">
+                        <i class="bi bi-graph-up-arrow me-2 text-primary"></i>Attendance (last 7 days)
+                    </h5>
+                    <button class="btn btn-sm btn-light rounded-pill px-3" @onclick="LoadAdminData" disabled="@isGeneratingChart">
+                        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+                    </button>
+                </div>
+                <div style="height: 260px; position: relative;">
+                    @if (isGeneratingChart)
+                    {
+                        <div class="position-absolute top-50 start-50 translate-middle text-center">
+                            <div class="spinner-border text-primary spinner-border-sm mb-2"></div>
+                            <div class="small text-muted">Loading chart…</div>
+                        </div>
+                    }
+                    <canvas id="weeklyAttendanceChart"></canvas>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="row row-cols-2 row-cols-md-4 g-2 g-md-3 mb-4">
+                <div class="col">
+                    <div class="glass-panel p-3 rounded-4 shadow-sm border-0 h-100 d-flex align-items-center gap-2">
+                        <i class="bi @(currentUser?.IsClockedIn == true ? "bi-check-circle-fill text-success" : "bi-circle text-muted") fs-4"></i>
+                        <div>
+                            <h6 class="text-muted text-uppercase small fw-bold mb-0" style="font-size: 0.65rem;">Today</h6>
+                            <div class="fw-bold text-dark small">@(currentUser?.IsClockedIn == true ? "Clocked in" : "Clocked out")</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="glass-panel p-3 rounded-4 shadow-sm border-0 h-100 d-flex align-items-center gap-2 cursor-pointer transition-all hover-translate-y" @onclick='() => NavigateTo("leave")'>
+                        <i class="bi bi-airplane-engines text-primary fs-4"></i>
+                        <div>
+                            <h6 class="text-muted text-uppercase small fw-bold mb-0" style="font-size: 0.65rem;">Leave</h6>
+                            <div class="fw-bold text-dark small">@workerPendingLeaveCount pending</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="glass-panel p-3 rounded-4 shadow-sm border-0 h-100 d-flex align-items-center gap-2 cursor-pointer transition-all hover-translate-y" @onclick='() => NavigateTo("absences")'>
+                        <i class="bi bi-clock-history text-warning fs-4"></i>
+                        <div>
+                            <h6 class="text-muted text-uppercase small fw-bold mb-0" style="font-size: 0.65rem;">Adjustments</h6>
+                            <div class="fw-bold text-dark small">@workerPendingCorrectionCount pending</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="glass-panel p-3 rounded-4 shadow-sm border-0 h-100 d-flex align-items-center gap-2 cursor-pointer transition-all hover-translate-y" @onclick='() => NavigateTo("worker/request-remote")'>
+                        <i class="bi bi-laptop text-danger fs-4"></i>
+                        <div>
+                            <h6 class="text-muted text-uppercase small fw-bold mb-0" style="font-size: 0.65rem;">Remote</h6>
+                            <div class="fw-bold text-dark small">@workerPendingRemoteCount pending</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <div id="clock-in" class="glass-panel p-3 p-md-4 rounded-4 shadow-sm border-0 bg-white mb-4">
+            <h5 class="fw-bold mb-3 text-dark">
+                <i class="bi bi-clock-history text-primary me-2"></i>Clock in / out
+            </h5>
+            <ClockInOut User="currentUser" OnClockStatusChanged="OnClockStatusChanged" />
+        </div>
+
+        @if (isAdmin)
+        {
+            <div class="mb-4">
+                <h5 class="fw-bold text-dark mb-3">Quick links</h5>
+                <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-2 g-md-3">
+                    @foreach (var action in GetAdminActions())
+                    {
+                        <div @key="action.Url" class="col">
+                            <button class="btn glass-panel w-100 h-100 p-3 rounded-4 shadow-sm text-start transition-all hover-translate-y border-0"
+                                    style="background: white;"
+                                    @onclick="() => NavigateTo(action.Url)">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="rounded-circle d-inline-flex align-items-center justify-content-center flex-shrink-0" style="width: 36px; height: 36px; background: @action.IconBg;">
+                                        <i class="bi @action.Icon text-dark"></i>
+                                    </span>
+                                    <div class="text-start overflow-hidden">
+                                        <h6 class="fw-bold text-dark mb-0 small">@action.Title</h6>
+                                        <p class="text-muted mb-0 d-none d-md-block" style="font-size: 0.7rem;">@action.Description</p>
+                                    </div>
+                                </div>
+                            </button>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private bool isAuthenticated;
+    private bool isAdmin;
+    private User? currentUser;
+
+    private int pendingLeaveCount;
+    private int pendingAbsenceCount;
+    private int pendingCorrectionCount;
+    private int pendingRemoteCount;
+    private double systemHealthScore;
+    private string? lastUpdateMessage;
+    private bool isGeneratingChart;
+
+    // Worker Specific
+    private int workerPendingLeaveCount;
+    private int workerPendingCorrectionCount;
+    private int workerPendingRemoteCount;
+
+    // SignalR
+    private HubConnection? hubConnection;
+    private System.Threading.CancellationTokenSource? _debounceCts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadStateAsync();
+            if (isAuthenticated)
+            {
+                if (isAdmin) await LoadAdminData();
+                else await LoadWorkerData();
+                
+                await InitializeSignalR();
+            }
+        }
+        catch
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task InitializeSignalR()
+    {
+        try
+        {
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(Navigation.ToAbsoluteUri("/hubs/analytics"), options =>
+                {
+                    options.HttpMessageHandlerFactory = (handler) =>
+                    {
+                        if (handler is HttpClientHandler clientHandler)
+                        {
+                            clientHandler.ServerCertificateCustomValidationCallback = 
+                                (sender, certificate, chain, sslPolicyErrors) => true;
+                        }
+                        return handler;
+                    };
+                })
+                .WithAutomaticReconnect()
+                .Build();
+
+            hubConnection.On<string, string>("AnalyticsUpdated", async (eventType, message) =>
+            {
+                await HandleRealTimeUpdate(eventType, message);
+            });
+
+            await hubConnection.StartAsync();
+        }
+        catch
+        {
+            // Real-time updates are optional; dashboard still works without SignalR.
+        }
+    }
+
+    private async Task HandleRealTimeUpdate(string eventType, string message)
+    {
+        try
+        {
+            _debounceCts?.Cancel();
+            _debounceCts = new System.Threading.CancellationTokenSource();
+            var token = _debounceCts.Token;
+
+            await InvokeAsync(() =>
+            {
+                lastUpdateMessage = message;
+                StateHasChanged();
+            });
+
+            await Task.Delay(1500, token);
+
+            if (!token.IsCancellationRequested)
+            {
+                await InvokeAsync(async () =>
+                {
+                    if (isAdmin) await LoadAdminData();
+                    else await LoadWorkerData();
+                    
+                    lastUpdateMessage = null;
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private async Task LoadAdminData()
+    {
+        try
+        {
+            var leaveRequests = await LeaveService.GetPendingLeaveRequestsAsync();
+            pendingLeaveCount = leaveRequests?.Count ?? 0;
+
+            var absences = await AbsenceService.GetPendingAbsencesAsync();
+            pendingAbsenceCount = absences?.Count ?? 0;
+
+            var corrections = await CorrectionService.GetPendingRequestsAsync();
+            pendingCorrectionCount = corrections?.Count ?? 0;
+
+            var remoteRequests = await RemoteWorkService.GetAllRequestsAsync();
+            pendingRemoteCount = remoteRequests?.Count(r => r.Status == "Pending") ?? 0;
+
+            var endDate = TimeHelper.GetToday();
+            var startDate = endDate.AddDays(-30);
+            var health = await AnalyticsService.GetBiometricHealthMetricsAsync(startDate, endDate);
+            systemHealthScore = health?.SystemHealthScore ?? 95;
+            
+            await InvokeAsync(StateHasChanged);
+            if (hubConnection?.State == HubConnectionState.Connected)
+            {
+                await RenderCharts();
+            }
+        }
+        catch
+        {
+            // Counts and chart stay at last known values on transient errors.
+        }
+    }
+
+    private async Task OnClockStatusChanged()
+    {
+        if (isAdmin)
+            await LoadAdminData();
+        else
+            await LoadWorkerData();
+    }
+
+    private async Task LoadWorkerData()
+    {
+        if (currentUser == null) return;
+        try
+        {
+            await AttendanceService.AutoClockOutCheckAsync();
+            
+            // Re-fetch current user to ensure status is fresh
+            var freshUser = await AuthService.RefreshCurrentUserAsync(UserService);
+            if (freshUser != null) currentUser = freshUser;
+
+            var leaves = await LeaveService.GetEmployeeLeaveRequestsAsync(currentUser.Id);
+            workerPendingLeaveCount = leaves?.Count(l => l.Status == "Pending") ?? 0;
+
+            var corrections = await CorrectionService.GetEmployeeRequestsAsync(currentUser.Id);
+            workerPendingCorrectionCount = corrections?.Count(c => c.Status == "Pending") ?? 0;
+            
+            var remote = await RemoteWorkService.GetUserRequestsAsync(currentUser.Id);
+            workerPendingRemoteCount = remote?.Count(r => r.Status == "Pending") ?? 0;
+            
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            // Worker stats stay at last known values on transient errors.
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && isAdmin)
+        {
+            await RenderCharts();
+        }
+    }
+
+    private async Task RenderCharts()
+    {
+        if (!isAdmin) return;
+        
+        isGeneratingChart = true;
+        StateHasChanged();
+        
+        try 
+        {
+            var endDate = TimeHelper.GetToday();
+            var startDate = endDate.AddDays(-6);
+            var trends = await AnalyticsService.GetAttendanceTrendsAsync(startDate, endDate);
+            
+            if (trends != null && trends.DailyData.Any())
+            {
+                var labels = trends.DailyData.Select(d => d.Date.ToString("ddd")).ToArray();
+                var presentData = trends.DailyData.Select(d => d.TotalPresent).ToArray();
+                var lateData = trends.DailyData.Select(d => d.Late).ToArray();
+
+                await JS.InvokeVoidAsync("analytics.renderAttendanceTrendChart", "weeklyAttendanceChart", labels, presentData, lateData);
+            }
+        } 
+        catch
+        {
+            // Chart area remains empty if analytics data is unavailable.
+        }
+        finally
+        {
+            isGeneratingChart = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task LoadStateAsync()
+    {
+        try
+        {
+            isAuthenticated = AuthService.IsAuthenticated;
+            isAdmin = AuthService.IsAdmin;
+            currentUser = AuthService.CurrentUser;
+        }
+        catch (Exception)
+        {
+            isAuthenticated = false;
+            isAdmin = false;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void NavigateToRegister() => Navigation.NavigateTo("/register");
+    private void NavigateToLogin() => Navigation.NavigateTo("/login");
+    private void NavigateTo(string url) => Navigation.NavigateTo($"/{url}");
+
+    private List<DashboardAction> GetAdminActions() => new()
+    {
+        new("Staff", "admin/staff", "Users and permissions", "#f1f5f9", "bi-people"),
+        new("Branches", "admin/branches", "Locations and geofences", "#f8fafc", "bi-geo"),
+        new("WhatsApp", "admin/whatsapp", "Messaging and reminders", "#f0f9ff", "bi-whatsapp"),
+        new("Analytics", "admin/deep-analytics", "Trends and biometric health", "#dbeafe", "bi-graph-up"),
+        new("Access report", "admin/access-report", "Login and match audit", "#e0f2fe", "bi-fingerprint"),
+        new("Audit log", "admin/audit", "System activity trail", "#dcfce7", "bi-shield-check"),
+        new("Attendance map", "admin/map", "Live clock-in locations", "#fef3c7", "bi-map"),
+        new("Settings", "admin/settings", "Hours, geofence, and holidays", "#f1f1f1", "bi-gear")
+    };
+
+    public record DashboardAction(string Title, string Url, string Description, string IconBg, string Icon);
+
+    public async ValueTask DisposeAsync()
+    {
+        _debounceCts?.Cancel();
+        _debounceCts?.Dispose();
+        
+        if (hubConnection != null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}

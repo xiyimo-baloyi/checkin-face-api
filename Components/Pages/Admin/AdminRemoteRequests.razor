@@ -1,0 +1,153 @@
+@page "/admin/remote-requests"
+@namespace Africanideasfaceapi.Components.Pages.Admin
+@using Africanideasfaceapi.Models
+@using Africanideasfaceapi.Services
+@inject RemoteWorkService RemoteWorkService
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Remote Work Requests - Admin</PageTitle>
+
+<div class="container mt-4 animate-fade-in pb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold text-primary mb-1">Remote Work Requests</h2>
+            <p class="text-muted mb-0">Review and approve temporary remote work permissions for On-site staff.</p>
+        </div>
+        <div class="d-flex gap-2">
+             <button class="btn btn-light rounded-pill px-4 shadow-sm" @onclick="LoadRequests">
+                <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+        </div>
+    }
+    else if (requests == null)
+    {
+        <div class="glass-panel p-5 text-center rounded-4 shadow-sm">
+            <i class="bi bi-exclamation-circle fs-1 text-danger opacity-75 d-block mb-3"></i>
+            <h5 class="text-dark fw-bold">Unable to load requests</h5>
+            <p class="text-muted small mb-0">Refresh the page or try again in a moment.</p>
+        </div>
+    }
+    else if (!requests.Any())
+    {
+        <div class="glass-panel p-5 text-center rounded-4 shadow-sm">
+            <i class="bi bi-calendar-x fs-1 text-muted opacity-50 d-block mb-3"></i>
+            <h5 class="text-muted">No pending remote work requests</h5>
+            <p class="text-muted small">When on-site workers request remote days, they will appear here.</p>
+        </div>
+    }
+    else
+    {
+        <div class="glass-panel p-0 rounded-4 shadow-sm overflow-hidden mb-5">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-light text-uppercase small letter-spacing-wide">
+                        <tr>
+                            <th class="ps-4">Employee</th>
+                            <th>Requested Date</th>
+                            <th>Reason</th>
+                            <th>Status</th>
+                            <th class="text-end pe-4">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="border-top-0">
+                        @foreach (var req in requests)
+                        {
+                            <tr @key="req.Id">
+                                <td class="ps-4">
+                                    <div class="fw-bold text-dark">@req.UserName</div>
+                                    <div class="text-muted small">ID: @req.UserId.Substring(Math.Max(0, req.UserId.Length - 8))</div>
+                                </td>
+                                <td>
+                                    <div class="fw-bold">@req.Date.ToString("ddd, dd MMM yyyy")</div>
+                                    <div class="text-muted small">@req.CreatedAt.ToString("g")</div>
+                                </td>
+                                <td>
+                                    <span class="text-truncate d-inline-block" style="max-width: 250px;" title="@req.Reason">@req.Reason</span>
+                                </td>
+                                <td>
+                                    <span class="badge @GetStatusClass(req.Status) rounded-pill px-3">@req.Status</span>
+                                </td>
+                                <td class="text-end pe-4">
+                                    @if (req.Status == "Pending")
+                                    {
+                                        <div class="d-flex gap-2 justify-content-end">
+                                            <button class="btn btn-success btn-sm rounded-pill px-3 shadow-sm" @onclick="() => ActionRequest(req.Id, true)">
+                                                <i class="bi bi-check2 me-1"></i> Approve
+                                            </button>
+                                            <button class="btn btn-danger btn-sm rounded-pill px-3 shadow-sm" @onclick="() => ActionRequest(req.Id, false)">
+                                                <i class="bi bi-x me-1"></i> Reject
+                                            </button>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small italic">Processed</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<RemoteWorkRequest>? requests;
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated || !AuthService.IsAdmin)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        await LoadRequests();
+    }
+
+    private async Task LoadRequests()
+    {
+        isLoading = true;
+        try 
+        {
+            requests = await RemoteWorkService.GetAllRequestsAsync();
+            if (requests == null) requests = new List<RemoteWorkRequest>();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading remote requests: {ex.Message}");
+            requests = new List<RemoteWorkRequest>();
+        }
+        isLoading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ActionRequest(string id, bool approve)
+    {
+        if (approve)
+            await RemoteWorkService.ApproveRequestAsync(id, "Approved by administrator");
+        else
+            await RemoteWorkService.RejectRequestAsync(id, "Rejected by administrator");
+        
+        await LoadRequests();
+    }
+
+    private string GetStatusClass(string status) => status switch
+    {
+        "Pending" => "bg-warning bg-opacity-10 text-warning",
+        "Approved" => "bg-success bg-opacity-10 text-success",
+        "Rejected" => "bg-danger bg-opacity-10 text-danger",
+        _ => "bg-secondary bg-opacity-10 text-muted"
+    };
+}

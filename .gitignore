@@ -1,0 +1,10 @@
+bin/
+obj/
+.vs/
+*.user
+appsettings.Local.json
+appsettings.*.local.json
+**/publish/
+wwwroot/uploads/
+hangfire.db
+hangfire.db-*

@@ -1,0 +1,199 @@
+@page "/attendance/correction/{attendanceId}"
+@using Africanideasfaceapi.Models
+@using Africanideasfaceapi.Services
+@inject AuthService AuthService
+@inject AttendanceService AttendanceService
+@inject CorrectionService CorrectionService
+@inject NavigationManager Navigation
+
+<PageTitle>New Correction Request - Attendance System</PageTitle>
+
+<div class="animate-fade-in pb-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="glass-panel p-0 rounded-4 shadow-lg border-0 overflow-hidden mb-4" style="background: white;">
+                <div class="py-5 px-4" style="background: #1e293b; min-height: 120px;">
+                    <h3 class="fw-bold text-white mb-1">Request Attendance Correction</h3>
+                    <p class="text-white-50 mb-0">Submit changes for approval by administration.</p>
+                </div>
+                
+                <div class="p-4 p-md-5">
+                    @if (attendance == null)
+                    {
+                        <div class="text-center py-5">
+                            <div class="spinner-border text-primary"></div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="p-4 rounded-4 mb-5 shadow-inner-soft" style="background: #f8fafc; border: 1px solid #e2e8f0;">
+                            <h6 class="form-label-primary mb-3">Current Record: @attendance.Date.ToString("dddd, MMMM dd, yyyy")</h6>
+                            <div class="row g-4">
+                                <div class="col-md-6">
+                                    <div class="text-muted small fw-bold text-uppercase mb-1" style="font-size: 0.7rem; letter-spacing: 0.05rem;">Clock In</div>
+                                    <div class="display-6 fw-bold text-primary">@(attendance.ClockInTime?.ToLocalTime().ToString("HH:mm") ?? "--:--")</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="text-muted small fw-bold text-uppercase mb-1" style="font-size: 0.7rem; letter-spacing: 0.05rem;">Clock Out</div>
+                                    <div class="display-6 fw-bold @(attendance.ClockOutTime == null ? "text-danger" : "text-dark")">
+                                        @(attendance.ClockOutTime?.ToLocalTime().ToString("HH:mm") ?? "Missing")
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <EditForm Model="correction" OnValidSubmit="HandleSubmit">
+                            <DataAnnotationsValidator />
+                            
+                            <div class="mb-4">
+                                <label class="form-label-primary">Requested Clock-In Time</label>
+                                <input type="time" class="form-control form-control-premium" @bind="requestedIn" />
+                                <div class="form-text small opacity-50">Leave blank if no change is needed.</div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="form-label-primary">Requested Clock-Out Time</label>
+                                <input type="time" class="form-control form-control-premium" @bind="requestedOut" />
+                            </div>
+
+                            <div class="mb-5">
+                                <label class="form-label-primary">Reason for Correction</label>
+                                <textarea class="form-control form-control-premium" @bind="correction.Reason" rows="4" placeholder="Briefly explain the adjustment..."></textarea>
+                                <ValidationMessage For="@(() => correction.Reason)" class="text-danger small mt-2" />
+                            </div>
+
+                            @if (!string.IsNullOrEmpty(statusMessage))
+                            {
+                                <div class="alert alert-@(isSuccess ? "success" : "danger") border-0 rounded-4 px-4 py-3 mb-4 animate-fade-in d-flex align-items-center">
+                                    <i class="bi bi-@(isSuccess ? "check-circle" : "exclamation-circle")-fill me-3 fs-5"></i>
+                                    <span class="fw-bold">@statusMessage</span>
+                                </div>
+                            }
+
+                            <div class="d-grid gap-3">
+                                <button type="submit" class="btn btn-primary btn-lg py-3 rounded-pill shadow-lg border-0 fw-bold transition-all hover-translate-y" 
+                                        style="background: #2563eb;" disabled="@isProcessing">
+                                    @if (isProcessing)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-2"></span>
+                                        <span>Authorizing Request...</span>
+                                    }
+                                    else
+                                    {
+                                        <span>Submit for Approval</span>
+                                    }
+                                </button>
+                                <button type="button" class="btn btn-link text-muted fw-bold text-decoration-none transition-all py-2" @onclick='() => Navigation.NavigateTo("/profile")'>
+                                    Cancel
+                                </button>
+                            </div>
+                        </EditForm>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string? attendanceId { get; set; }
+    
+    private Africanideasfaceapi.Models.Attendance? attendance;
+    private User? user;
+    private AttendanceCorrection correction = new();
+    private DateTime? requestedIn;
+    private DateTime? requestedOut;
+
+    private bool isProcessing = false;
+    private bool isSuccess = false;
+    private string? statusMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        user = AuthService.CurrentUser;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            if (user == null)
+            {
+                Navigation.NavigateTo("/login");
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(attendanceId))
+            {
+                try
+                {
+                    attendance = await AttendanceService.GetAttendanceByIdAsync(attendanceId);
+                    if (attendance != null)
+                    {
+                        // Pre-populate with current values if available
+                        requestedIn = attendance.ClockInTime?.ToLocalTime();
+                        requestedOut = attendance.ClockOutTime?.ToLocalTime();
+                        
+                        // Initialize correction model to satisfy required fields
+                        correction.AttendanceId = attendanceId;
+                        correction.EmployeeId = user.Id;
+                    }
+                    else
+                    {
+                        statusMessage = "Attendance record not found.";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    statusMessage = $"Error retrieving record: {ex.Message}";
+                }
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(correction.Reason))
+        {
+            statusMessage = "Please provide a reason.";
+            return;
+        }
+
+        isProcessing = true;
+        statusMessage = null;
+
+        try
+        {
+            // Prepare DateTime objects from time inputs
+            DateTime? finalIn = null;
+            DateTime? finalOut = null;
+
+            if (requestedIn.HasValue && attendance != null)
+            {
+                finalIn = attendance.Date.Date.Add(requestedIn.Value.TimeOfDay).ToUniversalTime();
+            }
+
+            if (requestedOut.HasValue && attendance != null)
+            {
+                finalOut = attendance.Date.Date.Add(requestedOut.Value.TimeOfDay).ToUniversalTime();
+            }
+
+            await CorrectionService.RequestCorrectionAsync(user!.Id, attendanceId!, finalIn, finalOut, correction.Reason);
+            
+            isSuccess = true;
+            statusMessage = "Your request has been submitted successfully.";
+            
+            await Task.Delay(2000);
+            Navigation.NavigateTo("/profile");
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Error submitting request: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+}

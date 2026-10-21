@@ -1,0 +1,582 @@
+@page "/leave"
+@using Africanideasfaceapi.Services
+@using Africanideasfaceapi.Models
+@inject LeaveService LeaveService
+@inject AuthService AuthService
+@inject FileStorageService FileStorageService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject ILogger<MyLeave> Logger
+
+<PageTitle>My Leave - African Ideas</PageTitle>
+
+<div class="animate-fade-in pb-4 pb-md-5">
+    <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between mb-4 mb-md-5 border-bottom pb-3 gap-3">
+        <div>
+            <h2 class="fw-bold mb-1 text-dark" style="color: #0f172a !important; font-size: clamp(1.5rem, 4vw, 2rem);">Time Off Management</h2>
+            <p class="text-muted mb-0 opacity-75" style="font-size: clamp(0.85rem, 2vw, 1rem);">Submit and track your leave requests with instant status updates.</p>
+        </div>
+        <div class="d-none d-md-block">
+            <span class="badge rounded-pill px-4 py-2 shadow-sm border" style="background: #f1f5f9; color: #475569; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.05rem;">
+                <i class="bi bi-calendar-week me-2"></i> LEAVE SYSTEM
+            </span>
+        </div>
+    </div>
+
+    @if (user == null)
+    {
+        <div class="d-flex justify-content-center align-items-center" style="min-height: 40vh;">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- Leave Balance Cards -->
+        <div class="row g-3 g-md-4 mb-5 animate-fade-in" style="animation-delay: 0.1s;">
+            <div class="col-6 col-md-3">
+                <div class="card border-0 shadow-sm rounded-4 h-100 overflow-hidden bg-white">
+                    <div class="card-body p-4 border-start border-4 border-warning">
+                        <small class="text-uppercase fw-bold text-muted letter-spacing-wide d-block mb-1" style="font-size: 0.65rem;">Vacation</small>
+                        <div class="d-flex align-items-baseline gap-1">
+                            <h3 class="fw-bold text-dark mb-0">@(leaveBalance?.AnnualLeaveAvailable ?? 0)</h3>
+                            <small class="text-muted">days</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card border-0 shadow-sm rounded-4 h-100 overflow-hidden bg-white">
+                    <div class="card-body p-4 border-start border-4 border-danger">
+                        <small class="text-uppercase fw-bold text-muted letter-spacing-wide d-block mb-1" style="font-size: 0.65rem;">Sick Leave</small>
+                        <div class="d-flex align-items-baseline gap-1">
+                            <h3 class="fw-bold text-dark mb-0">@(leaveBalance?.SickLeaveAvailable ?? 0)</h3>
+                            <small class="text-muted">days</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card border-0 shadow-sm rounded-4 h-100 overflow-hidden bg-white">
+                    <div class="card-body p-4 border-start border-4 border-primary">
+                        <small class="text-uppercase fw-bold text-muted letter-spacing-wide d-block mb-1" style="font-size: 0.65rem;">Family Resp.</small>
+                        <div class="d-flex align-items-baseline gap-1">
+                            <h3 class="fw-bold text-dark mb-0">@(leaveBalance?.FamilyLeaveAvailable ?? 0)</h3>
+                            <small class="text-muted">days</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card border-0 shadow-sm rounded-4 h-100 overflow-hidden bg-white">
+                    <div class="card-body p-4 border-start border-4 border-success">
+                        <small class="text-uppercase fw-bold text-muted letter-spacing-wide d-block mb-1" style="font-size: 0.65rem;">Study Leave</small>
+                        <div class="d-flex align-items-baseline gap-1">
+                            <h3 class="fw-bold text-dark mb-0">@(leaveBalance?.StudyLeaveAvailable ?? 0)</h3>
+                            <small class="text-muted">days</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card border-0 shadow-sm rounded-4 h-100 overflow-hidden bg-white">
+                    <div class="card-body p-4 border-start border-4 border-info">
+                        <small class="text-uppercase fw-bold text-muted letter-spacing-wide d-block mb-1" style="font-size: 0.65rem;">Parental Leave</small>
+                        <div class="d-flex align-items-baseline gap-1">
+                            <h3 class="fw-bold text-dark mb-0">@(leaveBalance?.ParentalLeaveAvailable ?? 0)</h3>
+                            <small class="text-muted">days</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card border-0 shadow-sm rounded-4 h-100 overflow-hidden bg-white">
+                    <div class="card-body p-4 border-start border-4" style="border-color: #f472b6 !important;">
+                        <small class="text-uppercase fw-bold text-muted letter-spacing-wide d-block mb-1" style="font-size: 0.65rem;">Maternity</small>
+                        <div class="d-flex align-items-baseline gap-1">
+                            <h3 class="fw-bold text-dark mb-0">@(leaveBalance?.MaternityLeaveAvailable ?? 0)</h3>
+                            <small class="text-muted">days</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 g-md-4">
+            <!-- New Request Form -->
+            <div class="col-12 col-lg-4 order-2 order-lg-1">
+                <div class="glass-panel p-0 rounded-4 shadow-lg border-0 overflow-hidden h-100" style="background: white;">
+                    <div class="py-4 px-4" style="background: #1e293b;">
+                        <h5 class="fw-bold mb-1 text-white">
+                            <i class="bi bi-plus-circle-fill me-2"></i> New Request
+                        </h5>
+                        <p class="text-white-50 small mb-0">Submit a new leave application</p>
+                    </div>
+
+                    <div class="p-4">
+                        @if (!string.IsNullOrEmpty(successMessage))
+                        {
+                            <div class="alert alert-success border-0 bg-success bg-opacity-10 text-success rounded-4 px-3 py-2 mb-3 animate-fade-in d-flex align-items-center">
+                                <i class="bi bi-check-circle-fill me-2 fs-5"></i>
+                                <div class="flex-grow-1">@successMessage</div>
+                                <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(errorMessage))
+                        {
+                            <div class="alert alert-danger border-0 bg-danger bg-opacity-10 text-danger rounded-4 px-3 py-2 mb-3 animate-fade-in d-flex align-items-center">
+                                <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
+                                <div class="flex-grow-1">@errorMessage</div>
+                                <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+                            </div>
+                        }
+
+                        <EditForm @key="newRequest" Model="newRequest" OnValidSubmit="HandleSubmit">
+                            <DataAnnotationsValidator />
+                            
+                            <div class="mb-4">
+                                <label class="form-label-primary">Leave Type</label>
+                                <InputSelect @bind-Value="newRequest.LeaveType" class="form-control form-control-premium select-premium">
+                                    <option value="Vacation">Annual Leave</option>
+                                    <option value="Sick">Sick Leave</option>
+                                    <option value="Family">Family Responsibility</option>
+                                    <option value="Parental">Parental Leave</option>
+                                    <option value="Maternity">Maternity Leave</option>
+                                    <option value="Study">Study Leave</option>
+                                    <option value="Out">Out Leave</option>
+                                    <option value="Unpaid">Unpaid Leave</option>
+                                </InputSelect>
+                                <ValidationMessage For="@(() => newRequest.LeaveType)" class="text-danger small mt-1" />
+                            </div>
+
+                            @if (newRequest.LeaveType == "Sick" || newRequest.LeaveType == "Study" || newRequest.LeaveType == "Parental")
+                            {
+                                <div class="mb-4">
+                                    <label class="form-label-primary">Supporting Document (PDF/Image)</label>
+                                    <div class="input-group">
+                                        <InputFile OnChange="HandleFileSelected" class="form-control form-control-premium" accept=".pdf,.jpg,.jpeg,.png,.heic,.heif" />
+                                    </div>
+                                    <small class="text-muted">Required for sick leave (>2 days) or special leave.</small>
+                                </div>
+                            }
+                            <div class="row g-3 mb-4">
+                                <div class="col-6">
+                                    <label class="form-label-primary">From</label>
+                                    <InputDate @bind-Value="newRequest.StartDate" class="form-control form-control-premium" />
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label-primary">To</label>
+                                    <InputDate @bind-Value="newRequest.EndDate" class="form-control form-control-premium" />
+                                </div>
+                            </div>
+
+                            <div class="bg-light p-3 rounded-4 mb-4 d-flex justify-content-between align-items-center">
+                                <span class="small fw-bold text-muted">Total Work Days:</span>
+                                <span class="badge bg-primary rounded-pill px-3">@LeaveService.CalculateWorkingDays(newRequest.StartDate, newRequest.EndDate) days</span>
+                            </div>
+
+                            <div class="mb-5">
+                                <label class="form-label-primary">Reason for Leave</label>
+                                <InputTextArea @bind-Value="newRequest.Reason" class="form-control form-control-premium" rows="4" placeholder="Briefly explain your request..." />
+                            </div>
+
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary btn-lg rounded-pill shadow-lg border-0 fw-bold transition-all hover-translate-y py-3" style="background: #2563eb;" disabled="@isSubmitting">
+                                    @if (isSubmitting)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-2"></span>
+                                        <span>Submitting...</span>
+                                    }
+                                    else
+                                    {
+                                        <span><i class="bi bi-send-fill me-2"></i> Submit Request</span>
+                                    }
+                                </button>
+                            </div>
+                        </EditForm>
+                    </div>
+                </div>
+            </div>
+
+            <!-- History List -->
+            <div class="col-12 col-lg-8 order-1 order-lg-2">
+                <div class="glass-panel p-0 rounded-4 shadow-sm overflow-hidden h-100" style="background: white;">
+                    <div class="p-4 border-bottom d-flex justify-content-between align-items-center">
+                        <h5 class="fw-bold mb-0 text-dark" style="font-size: 1.1rem;">My Leave Schedule</h5>
+                        <div class="btn-group btn-group-sm rounded-pill overflow-hidden border">
+                            <button class="btn @(activeTab == "list" ? "btn-primary" : "btn-light") px-3" @onclick='() => SetTab("list")'><i class="bi bi-list-ul"></i></button>
+                            <button class="btn @(activeTab == "calendar" ? "btn-primary" : "btn-light") px-3" @onclick='() => SetTab("calendar")'><i class="bi bi-calendar3"></i></button>
+                        </div>
+                    </div>
+                    
+                    @if (activeTab == "calendar")
+                    {
+                        <div class="p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="fw-bold text-dark">@currentCalendarDate.ToString("MMMM yyyy")</span>
+                                <div class="d-flex gap-1">
+                                    <button class="btn btn-outline-secondary btn-sm rounded-circle" style="width: 32px; height: 32px; padding: 0;" @onclick="PrevMonth"><i class="bi bi-chevron-left"></i></button>
+                                    <button class="btn btn-outline-secondary btn-sm rounded-circle" style="width: 32px; height: 32px; padding: 0;" @onclick="NextMonth"><i class="bi bi-chevron-right"></i></button>
+                                </div>
+                            </div>
+
+                            <div class="calendar-mini-grid">
+                                <div class="calendar-header">
+                                    <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
+                                </div>
+                                <div class="calendar-days">
+                                    @foreach (var day in calendarDays)
+                                    {
+                                        var hasLeave = requests?.Any(r => day.Date >= r.StartDate.Date && day.Date <= r.EndDate.Date && r.Status == "Approved") ?? false;
+                                        var isPending = requests?.Any(r => day.Date >= r.StartDate.Date && day.Date <= r.EndDate.Date && r.Status == "Pending") ?? false;
+                                        
+                                        <div class="cal-day @(day.Month != currentCalendarDate.Month ? "text-muted opacity-25" : "") @(hasLeave ? "has-leave" : "") @(isPending ? "is-pending" : "")">
+                                            @day.Day
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+
+                            <style>
+                                .calendar-mini-grid { border: 1px solid #f1f5f9; border-radius: 12px; }
+                                .calendar-header { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; border-bottom: 1px solid #f1f5f9; background: #f8fafc; border-radius: 12px 12px 0 0; }
+                                .calendar-header span { padding: 8px; font-size: 0.7rem; font-weight: 800; color: #94a3b8; }
+                                .calendar-days { display: grid; grid-template-columns: repeat(7, 1fr); }
+                                .cal-day { padding: 12px 4px; text-align: center; font-size: 0.85rem; position: relative; border-bottom: 1px solid #f8fafc; border-right: 1px solid #f8fafc; }
+                                .cal-day.has-leave { background: #dcfce7; color: #166534; font-weight: bold; }
+                                .cal-day.is-pending { background: #fef3c7; color: #92400e; }
+                            </style>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table align-middle mb-0">
+                                <thead class="text-uppercase small" style="color: #94a3b8; font-size: 0.65rem; letter-spacing: 0.05rem;">
+                                    <tr>
+                                        <th class="ps-4 border-0 py-4">Type</th>
+                                        <th class="border-0 py-4">Duration</th>
+                                        <th class="border-0 py-4">Status</th>
+                                        <th class="border-0 py-4">Reviewer</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="border-top-0" style="font-size: 0.85rem;">
+                                    @if (requests == null)
+                                    {
+                                        <tr>
+                                            <td colspan="4" class="text-center py-5">
+                                                <div class="spinner-border spinner-border-sm text-primary"></div>
+                                            </td>
+                                        </tr>
+                                    }
+                                    else if (!requests.Any())
+                                    {
+                                        <tr>
+                                            <td colspan="4" class="text-center py-5 text-muted opacity-50">
+                                                <div class="mb-3"><i class="bi bi-calendar-x fs-1 opacity-25"></i></div>
+                                                No leave requests submitted yet.
+                                            </td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var req in requests)
+                                        {
+                                            <tr @key="req.Id" class="border-top">
+                                                <td class="ps-4 py-3">
+                                                    <div class="d-flex align-items-center gap-3">
+                                                        <div class="rounded-circle d-flex align-items-center justify-content-center shadow-inner" style="width: 40px; height: 40px; background: @GetTypeColor(req.LeaveType);">
+                                                            @if (req.LeaveType == "Sick") { <i class="bi bi-thermometer-half text-white"></i> }
+                                                            else if (req.LeaveType == "Vacation") { <i class="bi bi-sun text-white"></i> }
+                                                            else if (req.LeaveType == "Family") { <i class="bi bi-people-fill text-white"></i> }
+                                                            else if (req.LeaveType == "Parental") { <i class="bi bi-gender-ambiguous text-white"></i> }
+                                                            else if (req.LeaveType == "Maternity") { <i class="bi bi-heart-pulse-fill text-white"></i> }
+                                                            else if (req.LeaveType == "Study") { <i class="bi bi-book-fill text-white"></i> }
+                                                            else if (req.LeaveType == "Out") { <i class="bi bi-door-open-fill text-white"></i> }
+                                                            else { <i class="bi bi-calendar-check text-white"></i> }
+                                                        </div>
+                                                        <div>
+                                                            <span class="fw-bold d-block text-dark">@req.LeaveType</span>
+                                                            <small class="text-muted opacity-75">@req.CreatedAt.ToString("MMM dd, yyyy")</small>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td class="py-3">
+                                                    <div class="fw-bold text-dark">@req.StartDate.ToString("MMM dd") - @req.EndDate.ToString("MMM dd")</div>
+                                                    <div class="text-muted small opacity-75">@req.DurationDays days</div>
+                                                </td>
+                                                <td class="py-3">
+                                                    <div class="mb-1">
+                                                        @switch (req.Status)
+                                                        {
+                                                            case "Approved":
+                                                                <span class="badge rounded-pill px-3 py-1" style="background: #dcfce7; color: #166534; font-size: 0.7rem;">
+                                                                    <i class="bi bi-check-circle-fill me-1"></i> Approved
+                                                                </span>
+                                                                break;
+                                                            case "Rejected":
+                                                                <span class="badge rounded-pill px-3 py-1" style="background: #fee2e2; color: #991b1b; font-size: 0.7rem;">
+                                                                    <i class="bi bi-x-circle-fill me-1"></i> Rejected
+                                                                </span>
+                                                                break;
+                                                            default:
+                                                                <span class="badge rounded-pill px-3 py-1" style="background: #fef3c7; color: #92400e; font-size: 0.7rem;">
+                                                                    <i class="bi bi-clock-fill me-1"></i> Pending
+                                                                </span>
+                                                                break;
+                                                        }
+                                                    </div>
+                                                    <span class="d-block text-truncate text-muted small" style="max-width: 150px;" title="@req.Reason">@req.Reason</span>
+                                                </td>
+                                                <td class="py-3">
+                                                    @if (!string.IsNullOrEmpty(req.ReviewedBy))
+                                                    {
+                                                        <div class="fw-bold text-dark small">Manager Review</div>
+                                                        <small class="text-muted opacity-75">@req.ReviewedAt?.ToString("MMM dd")</small>
+                                                        @if (!string.IsNullOrEmpty(req.AdminComment))
+                                                        {
+                                                            <div class="text-primary mt-1 small" style="font-style: italic;">
+                                                                "@req.AdminComment"
+                                                            </div>
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted opacity-50 small">Awaiting review...</span>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private User? user;
+    private List<LeaveRequest>? requests;
+    private LeaveBalance? leaveBalance;
+    private LeaveRequest newRequest = new();
+    private IBrowserFile? selectedFile;
+    private bool isSubmitting = false;
+    private string? successMessage;
+    private string? errorMessage;
+    private string activeTab = "list";
+
+    private IJSObjectReference? jsModule;
+
+    // Calendar state
+    private DateTime currentCalendarDate = DateTime.Today;
+    private List<DateTime> calendarDays = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try {
+            user = AuthService.CurrentUser;
+            if (user == null)
+            {
+                Navigation.NavigateTo("/login");
+                return;
+            }
+            // Initialize newRequest with default values after user is loaded
+            newRequest = new() { StartDate = DateTime.Today, EndDate = DateTime.Today, LeaveType = "Vacation" };
+            await LoadData();
+            GenerateCalendar();
+        }
+        catch {
+             Navigation.NavigateTo("/login");
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                jsModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/camera.js");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading camera JS module: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        selectedFile = e.File;
+    }
+
+    private void GenerateCalendar()
+    {
+        calendarDays.Clear();
+        var firstDayOfMonth = new DateTime(currentCalendarDate.Year, currentCalendarDate.Month, 1);
+        int diff = (int)firstDayOfMonth.DayOfWeek - (int)DayOfWeek.Monday;
+        if (diff < 0) diff += 7;
+        var startDate = firstDayOfMonth.AddDays(-diff);
+        for (int i = 0; i < 42; i++) calendarDays.Add(startDate.AddDays(i));
+    }
+
+    private async Task LoadData()
+    {
+        if (user == null || string.IsNullOrWhiteSpace(user.Id))
+        {
+            errorMessage = "Your account is missing an employee id. Please sign out and sign in again.";
+            return;
+        }
+
+        errorMessage = null;
+
+        try
+        {
+            requests = await LeaveService.GetEmployeeLeaveRequestsAsync(user.Id);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load leave requests for user {UserId}", user.Id);
+            requests = new List<LeaveRequest>();
+            errorMessage = "Could not load your leave requests. Please try again later.";
+        }
+
+        try
+        {
+            leaveBalance = await LeaveService.GetOrCreateLeaveBalanceAsync(user.Id);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load leave balance for user {UserId}", user.Id);
+            if (string.IsNullOrEmpty(errorMessage))
+            {
+                errorMessage = "Could not load leave balance. Please try again later.";
+            }
+        }
+    }
+
+    private void SetTab(string tab) { activeTab = tab; if (tab == "calendar") GenerateCalendar(); }
+    private void PrevMonth() { currentCalendarDate = currentCalendarDate.AddMonths(-1); GenerateCalendar(); }
+    private void NextMonth() { currentCalendarDate = currentCalendarDate.AddMonths(1); GenerateCalendar(); }
+
+    private async Task HandleSubmit()
+    {
+        if (user == null) return;
+
+        if (newRequest.EndDate < newRequest.StartDate)
+        {
+            errorMessage = "End date cannot be earlier than start date.";
+            return;
+        }
+
+        // Calculate duration for balance check
+        newRequest.DurationDays = LeaveService.CalculateWorkingDays(newRequest.StartDate, newRequest.EndDate);
+
+        // Check if enough balance
+        if (leaveBalance != null)
+        {
+            var days = newRequest.DurationDays;
+            bool hasBalance = newRequest.LeaveType switch {
+                "Vacation" => leaveBalance.AnnualLeaveAvailable >= days,
+                "Sick" => leaveBalance.SickLeaveAvailable >= days,
+                "Family" => leaveBalance.FamilyLeaveAvailable >= days,
+                "Parental" => leaveBalance.ParentalLeaveAvailable >= days,
+                "Study" => leaveBalance.StudyLeaveAvailable >= days,
+                "Out" => leaveBalance.OutLeaveAvailable >= days,
+                "Maternity" => leaveBalance.MaternityLeaveAvailable >= days,
+                "Unpaid" => true,
+                _ => false
+            };
+
+            if (!hasBalance)
+            {
+                var available = newRequest.LeaveType switch {
+                    "Vacation" => leaveBalance.AnnualLeaveAvailable,
+                    "Sick" => leaveBalance.SickLeaveAvailable,
+                    "Family" => leaveBalance.FamilyLeaveAvailable,
+                    "Parental" => leaveBalance.ParentalLeaveAvailable,
+                    "Study" => leaveBalance.StudyLeaveAvailable,
+                    "Out" => leaveBalance.OutLeaveAvailable,
+                    "Maternity" => leaveBalance.MaternityLeaveAvailable,
+                    _ => 0
+                };
+                errorMessage = $"Insufficient {newRequest.LeaveType} balance. You requested {days} days but only have {available} days available.";
+                return;
+            }
+        }
+
+        isSubmitting = true;
+        errorMessage = null;
+        successMessage = null;
+
+        try
+        {
+            newRequest.EmployeeId = user.Id;
+            newRequest.Status = "Pending";
+            
+            if (selectedFile != null)
+            {
+                string extension = Path.GetExtension(selectedFile.Name).ToLower();
+                bool isHeic = extension == ".heic" || extension == ".heif";
+                Stream stream;
+
+                if (isHeic && jsModule != null)
+                {
+                    // Convert HEIC to JPEG on client side
+                    var dataUrl = await jsModule.InvokeAsync<string>("convertHeicToJpeg", selectedFile);
+                    var bytes = Convert.FromBase64String(dataUrl.Split(',')[1]);
+                    stream = new MemoryStream(bytes);
+                }
+                else
+                {
+                    stream = selectedFile.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024); // Max 5MB
+                }
+
+                using (stream)
+                {
+                    var fileName = isHeic ? Path.ChangeExtension(selectedFile.Name, ".jpg") : selectedFile.Name;
+                    var filePath = await FileStorageService.SaveLeaveAttachmentAsync(stream, user.Id, fileName);
+                    newRequest.AttachmentPath = filePath;
+                }
+            }
+
+            await LeaveService.SubmitLeaveRequestAsync(newRequest, user.Name ?? "Unknown");
+            
+            successMessage = "Leave request submitted successfully.";
+            newRequest = new() { EmployeeId = user.Id, StartDate = DateTime.Today, EndDate = DateTime.Today, LeaveType="Vacation" };
+            selectedFile = null; // Clear selected file after submission
+            await LoadData();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Failed to submit request: " + ex.Message;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private string GetTypeColor(string type)
+    {
+        return type switch
+        {
+            "Vacation" => "#fcd34d",
+            "Sick" => "#f87171",
+            "Family" => "#60a5fa",
+            "Parental" => "#fb7185",
+            "Maternity" => "#f472b6",
+            "Study" => "#34d399",
+            "Out" => "#0ea5e9",
+            "Unpaid" => "#94a3b8",
+            _ => "#cbd5e1"
+        };
+    }
+}

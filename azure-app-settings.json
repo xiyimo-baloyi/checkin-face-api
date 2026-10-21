@@ -1,0 +1,177 @@
+[
+  {
+    "name": "ASPNETCORE_ENVIRONMENT",
+    "value": "Production",
+    "slotSetting": false
+  },
+  {
+    "name": "ASPNETCORE_LOGGING__CONSOLE__DISABLECOLORS",
+    "value": "true",
+    "slotSetting": false
+  },
+  {
+    "name": "ASPNETCORE_LOGGING__LOGLEVEL__DEFAULT",
+    "value": "Information",
+    "slotSetting": false
+  },
+  {
+    "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+    "value": "InstrumentationKey=YOUR_KEY;IngestionEndpoint=https://YOUR_REGION.in.applicationinsights.azure.com/;LiveEndpoint=https://YOUR_REGION.livediagnostics.monitor.azure.com/;ApplicationId=YOUR_APP_ID",
+    "slotSetting": false
+  },
+  {
+    "name": "AppBaseUrl",
+    "value": "https://YOUR_APP_NAME.azurewebsites.net",
+    "slotSetting": false
+  },
+  {
+    "name": "AzureFaceApi__Endpoint",
+    "value": "https://YOUR_FACE_API.cognitiveservices.azure.com/",
+    "slotSetting": false
+  },
+  {
+    "name": "AzureFaceApi__Key",
+    "value": "YOUR_FACE_API_KEY",
+    "slotSetting": false
+  },
+  {
+    "name": "CosmosDb__AccountEndpoint",
+    "value": "https://YOUR_COSMOS_ACCOUNT.documents.azure.com:443/",
+    "slotSetting": false
+  },
+  {
+    "name": "CosmosDb__AccountKey",
+    "value": "YOUR_COSMOS_KEY",
+    "slotSetting": false
+  },
+  {
+    "name": "CosmosDb__DatabaseName",
+    "value": "FaceApiDb",
+    "slotSetting": false
+  },
+  {
+    "name": "CosmosDb__ContainerName",
+    "value": "Users",
+    "slotSetting": false
+  },
+  {
+    "name": "AzureStorage__ConnectionString",
+    "value": "DefaultEndpointsProtocol=https;AccountName=YOUR_STORAGE;AccountKey=YOUR_STORAGE_KEY;EndpointSuffix=core.windows.net",
+    "slotSetting": false
+  },
+  {
+    "name": "AzureStorage__ContainerName",
+    "value": "faces",
+    "slotSetting": false
+  },
+  {
+    "name": "Azure__SignalR__ConnectionString",
+    "value": "Endpoint=https://YOUR_SIGNALR.service.signalr.net;AccessKey=YOUR_SIGNALR_KEY;Version=1.0;",
+    "slotSetting": false
+  },
+  {
+    "name": "ApiSettings__ApiKey",
+    "value": "YOUR_API_KEY",
+    "slotSetting": false
+  },
+  {
+    "name": "JwtSettings__SecretKey",
+    "value": "YOUR_JWT_SECRET_AT_LEAST_32_CHARACTERS_LONG",
+    "slotSetting": false
+  },
+  {
+    "name": "JwtSettings__Issuer",
+    "value": "AfricanIdeasIdentity",
+    "slotSetting": false
+  },
+  {
+    "name": "JwtSettings__Audience",
+    "value": "AfricanIdeasIdentityClient",
+    "slotSetting": false
+  },
+  {
+    "name": "JwtSettings__ExpiryMinutes",
+    "value": "1440",
+    "slotSetting": false
+  },
+  {
+    "name": "LoginSettings__RequireLivenessCheck",
+    "value": "false",
+    "slotSetting": false
+  },
+  {
+    "name": "LoginSettings__PoseToleranceDegrees",
+    "value": "20",
+    "slotSetting": false
+  },
+  {
+    "name": "CircuitOptions__DetailedErrors",
+    "value": "false",
+    "slotSetting": false
+  },
+  {
+    "name": "CircuitOptions__DisconnectedCircuitMaxRetained",
+    "value": "1500",
+    "slotSetting": false
+  },
+  {
+    "name": "CircuitOptions__DisconnectedCircuitRetentionPeriodMinutes",
+    "value": "10",
+    "slotSetting": false
+  },
+  {
+    "name": "EmailSettings__SmtpServer",
+    "value": "mail.development.africanideas.co.za",
+    "slotSetting": false
+  },
+  {
+    "name": "EmailSettings__SmtpPort",
+    "value": "465",
+    "slotSetting": false
+  },
+  {
+    "name": "EmailSettings__SmtpUsername",
+    "value": "test@development.africanideas.co.za",
+    "slotSetting": false
+  },
+  {
+    "name": "EmailSettings__SmtpPassword",
+    "value": "YOUR_SMTP_PASSWORD",
+    "slotSetting": false
+  },
+  {
+    "name": "EmailSettings__SenderName",
+    "value": "African Ideas Attendance System",
+    "slotSetting": false
+  },
+  {
+    "name": "EmailSettings__SenderEmail",
+    "value": "test@development.africanideas.co.za",
+    "slotSetting": false
+  },
+  {
+    "name": "EmailSettings__ManagerEmail",
+    "value": "manager@africanideas.co.za",
+    "slotSetting": false
+  },
+  {
+    "name": "WhatsAppSettings__Enabled",
+    "value": "false",
+    "slotSetting": false
+  },
+  {
+    "name": "WhatsAppSettings__PhoneNumberId",
+    "value": "YOUR_WHATSAPP_PHONE_ID",
+    "slotSetting": false
+  },
+  {
+    "name": "WhatsAppSettings__AccessToken",
+    "value": "YOUR_WHATSAPP_ACCESS_TOKEN",
+    "slotSetting": false
+  },
+  {
+    "name": "WhatsAppSettings__VerifyToken",
+    "value": "africanideas_attendance_secure",
+    "slotSetting": false
+  }
+]

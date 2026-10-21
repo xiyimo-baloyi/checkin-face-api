@@ -1,0 +1,70 @@
+/* Absence Log Card View (Mobile) */
+.absence-card-mobile {
+    background: #ffffff;
+    border-radius: 1rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    border: 1px solid #f1f5f9;
+}
+
+.absence-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.75rem;
+}
+
+.absence-date {
+    font-weight: 700;
+    color: #1e293b;
+    font-size: 0.95rem;
+}
+
+.absence-card-body {
+    background: #f8fafc;
+    border-radius: 0.75rem;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.absence-reason-text {
+    font-size: 0.85rem;
+    color: #475569;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.absence-card-footer {
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* Visibility Control */
+.desktop-only-table {
+    display: block;
+}
+
+.mobile-only-cards {
+    display: none;
+}
+
+@media (max-width: 991px) {
+    .desktop-only-table {
+        display: none !important;
+    }
+    
+    .mobile-only-cards {
+        display: block !important;
+    }
+}
+
+@media (max-width: 576px) {
+    .modal-dialog {
+        margin: 0.5rem;
+    }
+}

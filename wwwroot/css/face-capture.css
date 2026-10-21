@@ -1,0 +1,370 @@
+.biometric-video-container {
+  position: relative;
+  overflow: hidden !important;
+  border-radius: 1.5rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  background: #000;
+  height: 80vh; /* Default desktop height */
+  max-height: 800px;
+}
+
+.biometric-overlay-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  padding-top: 4rem; /* Buffer for top control buttons */
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+}
+.camera-container {
+  position: relative;
+  background: #000;
+  min-height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.face-frame-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.face-frame-oval {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 45vmin;
+  height: 60vmin;
+  border: 4px solid rgba(255, 255, 255, 0.8);
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  box-shadow:
+    0 0 0 9999px rgba(0, 0, 0, 0.6),
+    0 0 20px rgba(255, 255, 255, 0.3);
+  animation: pulse 2s ease-in-out infinite;
+  z-index: 5;
+  transition: all 0.3s ease;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    border-color: rgba(255, 255, 255, 0.8);
+    box-shadow:
+      0 0 0 9999px rgba(0, 0, 0, 0.5),
+      0 0 20px rgba(255, 255, 255, 0.3);
+  }
+  50% {
+    border-color: rgba(37, 99, 235, 0.9);
+    box-shadow:
+      0 0 0 9999px rgba(0, 0, 0, 0.5),
+      0 0 30px rgba(37, 99, 235, 0.5);
+  }
+}
+
+.laser-scan {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(to right, transparent, #2563eb, transparent);
+  box-shadow: 0 0 10px #2563eb;
+  z-index: 15;
+  animation: scan 3s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes scan {
+  0% { top: 10%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 90%; opacity: 0; }
+}
+
+.face-frame-instructions {
+  margin-top: 20px;
+  text-align: center;
+  color: white;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 10px 20px;
+  border-radius: 8px;
+}
+
+.face-frame-instructions p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.face-frame-instructions small {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.validation-status {
+  z-index: 20;
+  max-width: 300px;
+}
+
+.alert-sm {
+  font-size: 0.875rem;
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.validation-icons {
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.validation-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: white;
+  font-size: 0.85rem;
+  border-left: 3px solid transparent;
+  padding-left: 8px;
+}
+
+.validation-item.valid {
+  color: #4caf50;
+  border-left-color: #4caf50;
+}
+
+.validation-item.valid i {
+  color: #4caf50;
+}
+
+.validation-item.invalid {
+  color: #ff9800;
+  border-left-color: #ff9800;
+}
+
+.validation-item.invalid i {
+  color: #ff9800;
+}
+
+
+/* Responsive adjustments */
+@media (max-width: 992px) {
+
+  .validation-status {
+    max-width: 100%;
+    margin: 10px;
+  }
+}
+
+@media (max-width: 991px) {
+  .camera-container, 
+  .biometric-video-container {
+    height: 100dvh !important; /* Use dynamic viewport height */
+    min-height: -webkit-fill-available;
+    border-radius: 0 !important;
+    max-height: 100dvh !important;
+  }
+
+  .face-frame-oval {
+    margin-top: -80px; /* Shift up to make room for bottom controls on mobile */
+  }
+
+  /* Make the camera modal fully immersive */
+  .modal-dialog.modal-fullscreen-sm-down,
+  .modal-dialog.modal-fullscreen {
+    margin: 0 !important;
+    height: 100dvh !important;
+    max-width: 100% !important;
+  }
+  
+  .modal-content.bg-transparent {
+      height: 100dvh !important;
+  }
+
+  .instruction-box {
+    bottom: 160px !important; /* Above the big bottom buttons */
+    width: 90% !important;
+    padding: 0.75rem !important;
+    font-size: 0.9rem;
+  }
+
+  .biometric-overlay-layer {
+      padding: 1rem !important;
+      padding-top: 4.5rem !important;
+  }
+
+  .biometric-status-card {
+      max-width: min(220px, 55vw) !important;
+      font-size: 0.8rem;
+      line-height: 1.35;
+  }
+
+  .biometric-badge {
+      padding: 0.4rem 0.75rem !important;
+      font-size: 0.7rem !important;
+      max-width: min(200px, 50vw);
+  }
+  
+  /* Mobile-specific footer layout within the container */
+  .biometric-footer-mobile {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 1.5rem;
+      padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+      background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 60%, transparent 100%);
+      z-index: 100;
+  }
+
+  .biometric-footer-mobile .btn {
+      padding-top: 1rem !important;
+      padding-bottom: 1rem !important;
+      font-size: 1.1rem !important;
+  }
+}
+
+/* Premium Shutter Button */
+.shutter-button-container {
+    position: absolute;
+    bottom: 2rem;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 150;
+    pointer-events: none;
+}
+
+.shutter-button {
+    width: 72px;
+    height: 72px;
+    background: white;
+    border-radius: 50%;
+    padding: 4px;
+    border: 3px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    pointer-events: auto;
+    position: relative;
+    outline: none;
+}
+
+.shutter-button::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 58px;
+    height: 58px;
+    background: #2563eb;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.shutter-button:active {
+    transform: scale(0.92);
+}
+
+.shutter-button:active::after {
+    width: 48px;
+    height: 48px;
+}
+
+.shutter-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background: #e5e7eb;
+}
+
+.shutter-button:disabled::after {
+    background: #9ca3af;
+}
+
+/* Flash Effect */
+.camera-flash {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: white;
+    z-index: 200;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.camera-flash.active {
+    animation: flash-anim 0.4s ease-out;
+}
+
+@keyframes flash-anim {
+    0% { opacity: 0; }
+    20% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+/* Compact Control Buttons */
+.camera-controls-top {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    display: flex;
+    gap: 0.75rem;
+    z-index: 150;
+}
+
+.camera-btn-secondary {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.camera-btn-secondary:active {
+    background: rgba(0, 0, 0, 0.8);
+    transform: scale(0.9);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .face-frame-oval,
+  .laser-scan,
+  .camera-flash.active {
+    animation: none !important;
+  }
+
+  .face-frame-oval {
+    border-color: rgba(255, 255, 255, 0.9);
+  }
+
+  .laser-scan {
+    opacity: 0;
+  }
+}

@@ -1,0 +1,1090 @@
+@page "/admin/staff"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Admin")]
+@using Africanideasfaceapi.Models
+@using Africanideasfaceapi.Services
+@using Africanideasfaceapi.Helpers
+@inject UserService UserService
+@inject AuthService Auth
+@inject FaceApiService FaceApiService
+@inject AuditService AuditService
+@inject BranchService BranchService
+@inject AttendanceService AttendanceService
+@inject LeaveService LeaveService
+@inject AbsenceService AbsenceService
+@inject NavigationManager Navigation
+
+<PageTitle>Admin - User Management</PageTitle>
+
+@if (isLoading)
+{
+    <div class="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center align-items-center"
+         style="background-color: rgba(15,23,42,0.65); z-index: 2000; backdrop-filter: blur(4px);">
+        <div class="bg-white rounded-4 shadow-lg p-4 p-md-5 text-center" style="min-width: 260px; max-width: 360px;">
+            <div class="mb-3">
+                <div class="spinner-border text-primary" role="status" style="width: 2.5rem; height: 2.5rem; border-width: .25rem;">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+            <h5 class="fw-bold mb-1 text-dark">Preparing staff directory</h5>
+            <p class="text-muted small mb-0">Fetching the latest staff data from the database&hellip;</p>
+        </div>
+    </div>
+}
+else if (!isAuthenticated || !isAdmin)
+{
+    <div class="container mt-5">
+        <div class="alert alert-danger">
+            <h4>Access Denied</h4>
+            <p>You must be an admin to access this page.</p>
+            <a href="/login" class="btn btn-primary">Go to Login</a>
+        </div>
+    </div>
+}
+else
+{
+    <div class="container mt-4 animate-fade-in">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
+            <div class="d-flex align-items-center gap-3 w-100 w-md-auto">
+                <div class="bg-white rounded-circle p-1 d-flex align-items-center justify-content-center shadow-sm d-none d-md-flex" style="width: 50px; height: 50px;">
+                    <img src="/images/african-ideas-logo.png" alt="Logo" class="w-100" />
+                </div>
+                <div>
+                    <h2 class="fw-bold mb-1 mobile-h2">Staff Management</h2>
+                    <p class="text-muted mb-0 small mobile-d-none">Manage system users, permissions and shift schedules.</p>
+                </div>
+            </div>
+            <div class="d-flex align-items-center w-100 w-md-auto justify-content-between justify-content-md-end">
+                <div class="me-3 text-end d-none d-sm-block">
+                    <div class="fw-bold text-primary">@currentUser?.Name</div>
+                    <div class="text-muted small">Administrator</div>
+                </div>
+                <button class="btn btn-outline-danger btn-sm rounded-pill px-4 transition-all hover-translate-y" @onclick="HandleLogout">
+                    <i class="bi bi-box-arrow-right me-2"></i> Logout
+                </button>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(SuccessMessage))
+        {
+            <div class="alert alert-success alert-dismissible fade show border-0 shadow-sm rounded-4 mb-4" role="alert">
+                <i class="bi bi-check-circle-fill me-2"></i>
+                @SuccessMessage
+                <button type="button" class="btn-close" @onclick="() => SuccessMessage = null"></button>
+            </div>
+        }
+        @if (!string.IsNullOrEmpty(ErrorMessage))
+        {
+            <div class="alert alert-danger alert-dismissible fade show border-0 shadow-sm rounded-4 mb-4" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                @ErrorMessage
+                <button type="button" class="btn-close" @onclick="() => ErrorMessage = null"></button>
+            </div>
+        }
+
+        <!-- Search and Filters -->
+        <div class="glass-panel p-3 p-md-4 mb-4 rounded-4 shadow-sm">
+            <div class="row g-2 g-md-3">
+                <div class="col-12 col-md-4">
+                    <div class="form-floating text-dark">
+                        <input type="text" class="form-control border-0 shadow-sm" id="searchQuery" placeholder="Search..." @bind="searchQuery" @bind:event="oninput" @onkeyup="HandleSearch" />
+                        <label for="searchQuery">Search Name, Email or ID</label>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="form-floating text-dark">
+                        <select class="form-select border-0 shadow-sm" id="regMethod" @bind="filterRegistrationMethod" @bind:after="HandleFilter">
+                            <option value="">All Methods</option>
+                            <option value="Face">Face</option>
+                            <option value="Document">Document</option>
+                        </select>
+                        <label for="regMethod">Registration</label>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="form-floating text-dark">
+                        <select class="form-select border-0 shadow-sm" id="statusFilter" @bind="filterStatus" @bind:after="HandleFilter">
+                            <option value="">All Statuses</option>
+                            <option value="Approved">Active</option>
+                            <option value="Pending">Pending</option>
+                            <option value="Inactive">Inactive</option>
+                        </select>
+                        <label for="statusFilter">Status</label>
+                    </div>
+                </div>
+                <div class="col-12 col-md-2 d-flex align-items-center">
+                    <button class="btn btn-primary w-100 h-100 rounded-3 shadow-sm btn-lg transition-all hover-translate-y" @onclick="ClearFilters">
+                        <i class="bi bi-x-circle me-2"></i> Clear
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Export & Navigation -->
+        <div class="row g-2 mb-4">
+            <div class="col-6 col-md-auto">
+                <a href="/api/export/workers?format=csv" class="btn btn-sm btn-white w-100 shadow-sm rounded-pill px-3 border transition-all hover-translate-y text-center" target="_blank">
+                    <i class="bi bi-filetype-csv me-1 text-success"></i> CSV Export
+                </a>
+            </div>
+            <div class="col-6 col-md-auto">
+                <a href="/api/export/workers?format=json" class="btn btn-sm btn-white w-100 shadow-sm rounded-pill px-3 border transition-all hover-translate-y text-center" target="_blank">
+                    <i class="bi bi-filetype-json me-1 text-info"></i> JSON Export
+                </a>
+            </div>
+            <div class="col-12 col-md-auto ms-md-auto d-flex gap-2">
+                <a href="/admin/analytics" class="btn btn-sm btn-outline-primary shadow-sm rounded-pill px-3 transition-all hover-translate-y flex-grow-1">
+                    <i class="bi bi-graph-up-arrow me-1"></i> Analytics
+                </a>
+                <a href="/admin/deep-analytics" class="btn btn-sm btn-primary shadow-sm rounded-pill px-3 transition-all hover-translate-y flex-grow-1">
+                    <i class="bi bi-cpu me-1"></i> Deep Intelligence
+                </a>
+            </div>
+        </div>
+
+        <!-- Users Main Area -->
+        <div class="glass-panel p-0 rounded-4 shadow-sm overflow-hidden mb-5 border-0">
+            <div class="p-3 p-md-4 border-bottom border-light d-flex justify-content-between align-items-center" style="background: #fafafa;">
+                <h5 class="mb-0 fw-bold text-dark" style="color: #1e293b !important;">Staff Directory</h5>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted small fw-medium d-none d-sm-block">Entries:</span>
+                    <select class="form-select form-select-sm border-0 shadow-sm fw-bold px-3 py-1 rounded-3" style="width: auto; background: #fff; color: #1e293b; font-size: 0.8rem;" @bind="pageSize" @bind:after="HandlePageSizeChange">
+                        <option value="10">10</option>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                    </select>
+                </div>
+            </div>
+            
+            @if (paginatedUsers == null || !paginatedUsers.Any())
+            {
+                <div class="text-center py-5">
+                    <div class="py-4 text-muted">
+                        <i class="bi bi-people fs-1 d-block mb-3 opacity-25"></i>
+                        No users found matching your criteria.
+                    </div>
+                </div>
+            }
+            else
+            {
+                <!-- Desktop Table View -->
+                <div class="desktop-only-table table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="text-uppercase small letter-spacing-wide text-muted" style="border-bottom: 2px solid #f8fafc;">
+                            <tr>
+                                <th class="ps-4 py-3 fw-bold">Profile</th>
+                                <th class="py-3 fw-bold">Identity Details</th>
+                                <th class="py-3 fw-bold">Status</th>
+                                <th class="py-3 fw-bold">Role</th>
+                                <th class="text-end pe-4 py-3 fw-bold">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="border-top-0">
+                            @foreach (var usr in paginatedUsers)
+                            {
+                                <tr @key="usr.Id">
+                                    <td class="ps-4">
+                                        <div class="rounded-circle d-flex align-items-center justify-content-center shadow-sm" style="width: 44px; height: 44px; background: #f1f5f9; border: 1px solid #e2e8f0;">
+                                            @if (!string.IsNullOrEmpty(usr.ImageBase64))
+                                            {
+                                                <img src="data:image/jpeg;base64,@usr.ImageBase64" alt="@usr.Name" class="rounded-circle w-100 h-100" style="object-fit: cover;" />
+                                            }
+                                            else
+                                            {
+                                                <i class="bi bi-person-fill text-primary" style="font-size: 1.5rem;"></i>
+                                            }
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold text-dark mb-0" style="font-size: 0.95rem;">@usr.Name @usr.Surname</div>
+                                        <div class="text-muted small d-flex align-items-center gap-2 opacity-75">
+                                            <span>@usr.Email</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge rounded-pill px-3 py-2 fw-medium @(usr.Status == "Approved" ? "bg-success bg-opacity-10 text-success" : "bg-warning bg-opacity-10 text-warning")" style="font-size: 0.75rem;">
+                                            @usr.Status
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge rounded-pill px-3 py-2 fw-medium @(usr.Role == "Admin" ? "bg-danger bg-opacity-10 text-danger" : "bg-primary bg-opacity-10 text-primary")" style="font-size: 0.75rem;">
+                                            @usr.Role
+                                        </span>
+                                    </td>
+                                    <td class="text-end pe-4">
+                                        <div class="d-flex justify-content-end gap-2">
+                                            <button class="btn btn-sm btn-light rounded-pill px-3" @onclick="() => ViewUserDetails(usr)"><i class="bi bi-eye"></i></button>
+                                            <button class="btn btn-sm btn-light text-primary rounded-pill px-3" @onclick="() => EditUser(usr)"><i class="bi bi-pencil"></i></button>
+                                            @if (currentUser?.Id != usr.Id)
+                                            {
+                                                <button class="btn btn-sm btn-light text-danger rounded-pill px-3" @onclick="() => ConfirmDelete(usr)"><i class="bi bi-trash"></i></button>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Mobile Card View -->
+                <div class="mobile-only-cards p-2 p-md-3">
+                    @foreach (var usr in paginatedUsers)
+                    {
+                        <div class="worker-card-mobile animate-fade-in" @key="@($"card-{usr.Id}")">
+                            <div class="worker-header">
+                                <div class="worker-avatar-container">
+                                    @if (!string.IsNullOrEmpty(usr.ImageBase64))
+                                    {
+                                        <img src="data:image/jpeg;base64,@usr.ImageBase64" alt="@usr.Name" class="worker-avatar" />
+                                    }
+                                    else
+                                    {
+                                        <div class="worker-avatar d-flex align-items-center justify-content-center bg-primary bg-opacity-10">
+                                            <i class="bi bi-person-fill text-primary fs-3"></i>
+                                        </div>
+                                    }
+                                </div>
+                                <div class="worker-info">
+                                    <div class="worker-name">@usr.Name @usr.Surname</div>
+                                    <div class="worker-id">ID: @(usr.IdNumber?.Length > 8 ? usr.IdNumber.Substring(0, 8) + "..." : usr.IdNumber)</div>
+                                    <div class="mt-1">
+                                        <span class="badge rounded-pill @(usr.Status == "Approved" ? "bg-success" : "bg-warning") bg-opacity-10 @(usr.Status == "Approved" ? "text-success" : "text-warning") px-2 py-1" style="font-size: 0.65rem;">
+                                            @usr.Status
+                                        </span>
+                                        <span class="badge rounded-pill @(usr.Role == "Admin" ? "bg-danger" : "bg-primary") bg-opacity-10 @(usr.Role == "Admin" ? "text-danger" : "text-primary") px-2 py-1 ms-1" style="font-size: 0.65rem;">
+                                            @usr.Role
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="worker-details">
+                                <div class="detail-item">
+                                    <span class="detail-label">Email</span>
+                                    <span class="detail-value text-truncate" style="max-width: 120px;">@usr.Email</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Type</span>
+                                    <span class="detail-value">@(usr.WorkType ?? "On-site")</span>
+                                </div>
+                            </div>
+
+                            <div class="worker-actions-grid">
+                                <button class="btn btn-outline-primary rounded-pill btn-sm py-2 fw-bold" @onclick="() => ViewUserDetails(usr)">
+                                    <i class="bi bi-eye me-1"></i> View
+                                </button>
+                                <button class="btn btn-primary rounded-pill btn-sm py-2 fw-bold" @onclick="() => EditUser(usr)">
+                                    <i class="bi bi-pencil me-1"></i> Manage
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            <!-- Pagination -->
+            @if (totalPages > 1)
+            {
+                <div class="p-4 border-top border-light d-flex justify-content-center bg-light bg-opacity-25">
+                    <nav>
+                        <ul class="pagination pagination-sm mb-0 gap-1 border-0">
+                            <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                                <button class="page-link rounded-circle border-0 shadow-sm mx-1 p-2" @onclick="() => ChangePage(currentPage - 1)">
+                                    <i class="bi bi-chevron-left"></i>
+                                </button>
+                            </li>
+                            <li class="page-item active">
+                                <button class="page-link rounded-circle border-0 shadow-sm mx-1 px-3">@currentPage / @totalPages</button>
+                            </li>
+                            <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                                <button class="page-link rounded-circle border-0 shadow-sm mx-1 p-2" @onclick="() => ChangePage(currentPage + 1)">
+                                    <i class="bi bi-chevron-right"></i>
+                                </button>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+<!-- Modals Section -->
+
+<!-- User Details Modal -->
+@if (userToView != null)
+{
+    <div class="modal show d-block animate-fade-in" tabindex="-1" style="background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px);">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content border-0 shadow-glow-primary rounded-4 overflow-hidden">
+                <div class="modal-header bg-primary text-white border-0 py-3">
+                    <h5 class="modal-title fw-bold">User Profile: @userToView.Name</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => userToView = null"></button>
+                </div>
+                <div class="modal-body p-4 bg-light" style="max-height: 70vh; overflow-y: auto;">
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <h6 class="form-label-primary mb-3 pb-2 border-bottom">System Information</h6>
+                            <div class="glass-panel p-3 rounded-3 bg-white shadow-sm">
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span class="text-muted small">Name:</span>
+                                    <span class="fw-bold">@userToView.Name</span>
+                                </div>
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span class="text-muted small">Surname:</span>
+                                    <span class="fw-bold">@userToView.Surname</span>
+                                </div>
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span class="text-muted small">Email:</span>
+                                    <span class="fw-bold">@userToView.Email</span>
+                                </div>
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span class="text-muted small">Phone:</span>
+                                    <span class="fw-bold">@(userToView.PhoneNumber ?? "N/A")</span>
+                                </div>
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span class="text-muted small">ID Number:</span>
+                                    <span class="fw-bold">@userToView.IdNumber</span>
+                                </div>
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span class="text-muted small">Branch:</span>
+                                    <span class="fw-bold">@(userToView.BranchId ?? "General")</span>
+                                </div>
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span class="text-muted small">Registered:</span>
+                                    <span class="fw-bold small">@(userToView.RegisteredDate?.ToString("yyyy-MM-dd HH:mm") ?? "N/A")</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="form-label-primary mb-3 pb-2 border-bottom">Profile Picture</h6>
+                            @if (!string.IsNullOrEmpty(userToView.ImageBase64))
+                            {
+                                <div class="glass-panel p-2 rounded-3 bg-white shadow-sm text-center">
+                                    <img src="data:image/jpeg;base64,@userToView.ImageBase64" alt="Face" class="img-fluid rounded-2" style="max-height: 200px; width: 100%; object-fit: cover;" />
+                                    <p class="text-muted small mt-2 mb-0"><i class="bi bi-check-circle-fill text-success me-1"></i> Biometric Enrolled</p>
+                                </div>
+                            }
+                            else if (!string.IsNullOrEmpty(userToView.DocumentImagePath))
+                            {
+                                <div class="glass-panel p-2 rounded-3 bg-white shadow-sm text-center">
+                                    <img src="@PathHelper.FixImagePath(userToView.DocumentImagePath)" alt="ID Document" class="img-fluid rounded-2" style="max-height: 200px; width: 100%; object-fit: cover;" />
+                                    <p class="text-muted small mt-2 mb-0"><i class="bi bi-file-earmark-person-fill text-primary me-1"></i> ID Document</p>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="glass-panel p-5 rounded-3 bg-white shadow-sm text-center text-muted d-flex flex-column align-items-center justify-content-center h-100 min-h-200">
+                                    <div class="rounded-circle bg-light p-4 mb-3">
+                                        <i class="bi bi-person-badge fs-1 text-secondary opacity-50"></i>
+                                    </div>
+                                    <h6 class="fw-bold text-dark mb-1">No Profile Picture</h6>
+                                    <p class="small opacity-75 mb-0">No face data or ID document available for this user.</p>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="row g-4 mt-2">
+                        <div class="col-12">
+                            <h6 class="form-label-primary mb-3 pb-2 border-bottom">Leave Balance (@TimeHelper.GetNow().Year)</h6>
+                            @if (userLeaveBalance == null)
+                            {
+                                <div class="text-center py-3">
+                                    <div class="spinner-border spinner-border-sm text-primary"></div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="row g-2">
+                                    <div class="col-4 col-md-2">
+                                        <div class="p-2 rounded-3 bg-white border text-center shadow-sm h-100">
+                                            <small class="text-muted d-block" style="font-size: 0.6rem;">Vacation</small>
+                                            <div class="fw-bold">@userLeaveBalance.AnnualLeaveAvailable</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-4 col-md-2">
+                                        <div class="p-2 rounded-3 bg-white border text-center shadow-sm h-100">
+                                            <small class="text-muted d-block" style="font-size: 0.6rem;">Sick</small>
+                                            <div class="fw-bold">@userLeaveBalance.SickLeaveAvailable</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-4 col-md-2">
+                                        <div class="p-2 rounded-3 bg-white border text-center shadow-sm h-100">
+                                            <small class="text-muted d-block" style="font-size: 0.6rem;">Family</small>
+                                            <div class="fw-bold">@userLeaveBalance.FamilyLeaveAvailable</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-4 col-md-2">
+                                        <div class="p-2 rounded-3 bg-white border text-center shadow-sm h-100">
+                                            <small class="text-muted d-block" style="font-size: 0.6rem;">Parental</small>
+                                            <div class="fw-bold">@userLeaveBalance.ParentalLeaveAvailable</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-4 col-md-2">
+                                        <div class="p-2 rounded-3 bg-white border text-center shadow-sm h-100">
+                                            <small class="text-muted d-block" style="font-size: 0.6rem;">Maternity</small>
+                                            <div class="fw-bold">@userLeaveBalance.MaternityLeaveAvailable</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-4 col-md-2">
+                                        <div class="p-2 rounded-3 bg-white border text-center shadow-sm h-100">
+                                            <small class="text-muted d-block" style="font-size: 0.6rem;">Out/Study</small>
+                                            <div class="fw-bold">@(userLeaveBalance.OutLeaveAvailable + userLeaveBalance.StudyLeaveAvailable)</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        <div class="col-12">
+                            <h6 class="form-label-primary mb-3 pb-2 border-bottom">Recent Attendance Tracking</h6>
+                            @if (userRecords == null)
+                            {
+                                <div class="text-center py-3">
+                                    <div class="spinner-border spinner-border-sm text-primary"></div>
+                                </div>
+                            }
+                            else if (!userRecords.Any())
+                            {
+                                <p class="text-muted small text-center italic py-2">No attendance data recorded yet.</p>
+                            }
+                            else
+                            {
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-borderless align-middle mb-0" style="font-size: 0.75rem;">
+                                        <thead class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Clock In</th>
+                                                <th>Clock Out</th>
+                                                <th>Shift</th>
+                                                <th>Overtime</th>
+                                                <th class="text-end">Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var rec in userRecords.OrderByDescending(r => r.Date).Take(5))
+                                            {
+                                                <tr>
+                                                    <td class="fw-bold">@rec.Date.ToString("dd MMM")</td>
+                                                    <td>@(rec.ClockInTime?.ToString("HH:mm") ?? "--:--")</td>
+                                                    <td>@(rec.ClockOutTime?.ToString("HH:mm") ?? "--:--")</td>
+                                                    <td>@rec.ShiftHours.GetValueOrDefault().ToString("F1")h</td>
+                                                    <td>
+                                                        @if (rec.OvertimeHours > 0)
+                                                        {
+                                                            <span class="badge bg-warning bg-opacity-10 text-dark px-2">@rec.OvertimeHours.GetValueOrDefault().ToString("F1")h</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span>0.0h</span>
+                                                        }
+                                                    </td>
+                                                    <td class="text-end fw-bold">@rec.TotalHours.GetValueOrDefault().ToString("F1")h</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                        </div>
+
+
+                        <div class="col-12">
+                            <h6 class="form-label-primary mb-3 pb-2 border-bottom">Absence History (@TimeHelper.GetNow().Year)</h6>
+                            @if (userAbsences == null)
+                            {
+                                <div class="text-center py-3">
+                                    <div class="spinner-border spinner-border-sm text-primary"></div>
+                                </div>
+                            }
+                            else if (!userAbsences.Any())
+                            {
+                                <p class="text-muted small text-center italic py-2">No absence records found.</p>
+                            }
+                            else
+                            {
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-borderless align-middle mb-0" style="font-size: 0.75rem;">
+                                        <thead class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Type</th>
+                                                <th>Reason</th>
+                                                <th class="text-end">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var abs in userAbsences.Take(5))
+                                            {
+                                                <tr>
+                                                    <td class="fw-bold">@abs.Date.ToString("dd MMM")</td>
+                                                    <td>
+                                                        <span class="badge rounded-pill px-2 py-1 @(abs.AbsenceType == "Sick" ? "bg-info text-info bg-opacity-10" : "bg-light text-muted")" style="font-size: 0.65rem;">
+                                                            @(abs.AbsenceType ?? "Unknown")
+                                                        </span>
+                                                    </td>
+                                                    <td class="text-truncate" style="max-width: 150px;" title="@abs.Reason">
+                                                        @(string.IsNullOrEmpty(abs.Reason) ? "-" : abs.Reason)
+                                                    </td>
+                                                    <td class="text-end">
+                                                        <span class="badge rounded-pill px-2 py-1 @(abs.Status == "Approved" ? "bg-success text-success bg-opacity-10" : (abs.Status == "Rejected" ? "bg-danger text-danger bg-opacity-10" : "bg-warning text-warning bg-opacity-10"))" style="font-size: 0.65rem;">
+                                                            @abs.Status
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top-0 bg-light">
+                    <button type="button" class="btn btn-outline-secondary px-4 rounded-pill" @onclick="() => userToView = null">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Edit User Modal -->
+@if (userToEdit != null)
+{
+    <div class="modal show d-block animate-fade-in" tabindex="-1" style="background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px);">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content border-0 shadow-glow-primary rounded-4 overflow-hidden">
+                <div class="modal-header bg-primary text-white border-0 py-3">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-pencil-square me-2"></i> Edit User Details</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => userToEdit = null"></button>
+                </div>
+                <div class="modal-body p-4 bg-light" style="max-height: 70vh; overflow-y: auto;">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label form-label-primary">First Name</label>
+                            <input type="text" class="form-control form-control-premium" @bind="userToEdit.Name" placeholder="First Name" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label form-label-primary">Surname</label>
+                            <input type="text" class="form-control form-control-premium" @bind="userToEdit.Surname" placeholder="Surname" />
+                        </div>
+                         <div class="col-md-6">
+                            <label class="form-label form-label-primary">Email Address</label>
+                            <input type="email" class="form-control form-control-premium" @bind="userToEdit.Email" placeholder="Email" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label form-label-primary">WhatsApp / Phone</label>
+                            <input type="tel" class="form-control form-control-premium" @bind="userToEdit.PhoneNumber" placeholder="+27..." />
+                        </div>
+                        <div class="col-md-6">
+                             <label class="form-label form-label-primary">ID Number</label>
+                             <input type="text" class="form-control form-control-premium" @bind="userToEdit.IdNumber" placeholder="ID" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label form-label-primary">System Role</label>
+                            <select @bind="userToEdit.Role" class="form-select form-control-premium select-premium">
+                                <option value="User">Worker</option>
+                                <option value="Admin">Administrator</option>
+                            </select>
+                        </div>
+                        <div class="col-12 mt-4">
+                            <h6 class="form-label-primary mb-3 pb-2 border-bottom">Shift & Location Settings</h6>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                     <label class="form-label form-label-primary small">Work Arrangement</label>
+                                     <select class="form-select form-control-premium select-premium" @bind="userToEdit.WorkType">
+                                         <option value="On-site">Full On-site</option>
+                                         <option value="Hybrid">Hybrid (Mixed)</option>
+                                         <option value="Remote">Full Remote</option>
+                                     </select>
+                                </div>
+                                <div class="col-md-6">
+                                     <label class="form-label form-label-primary small">Branch / Location</label>
+                                     <select class="form-select form-control-premium select-premium" @bind="userToEdit.BranchId">
+                                         <option value="">No Branch Assigned</option>
+                                         @foreach (var branch in branches)
+                                         {
+                                             <option value="@branch.Id">@branch.Name</option>
+                                         }
+                                     </select>
+                                </div>
+
+                                @if (userToEdit.WorkType == "Hybrid")
+                                {
+                                    <div class="col-12">
+                                        <label class="form-label form-label-primary small d-block">Scheduled In-Office Days (Geofencing enforced on these days)</label>
+                                        <div class="d-flex flex-wrap gap-2">
+                                            @foreach (DayOfWeek day in Enum.GetValues(typeof(DayOfWeek)))
+                                            {
+                                                bool isSelected = userToEdit.HybridWorkDays.Contains(day.ToString());
+                                                <button type="button" class="btn btn-sm rounded-pill px-3 @(isSelected ? "btn-primary shadow-sm" : "btn-outline-secondary")"
+                                                        @onclick="() => ToggleHybridDay(day)">
+                                                    @day.ToString().Substring(0, 3)
+                                                </button>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+
+                                <div class="col-md-6">
+                                     <label class="form-label form-label-primary small">Shift Start</label>
+                                     <input type="time" class="form-control form-control-premium" value="@(userToEdit.WorkStartTime?.ToString(@"hh\:mm"))" @onchange="UpdateStartTime" />
+                                </div>
+                                <div class="col-md-6">
+                                     <label class="form-label form-label-primary small">Shift End</label>
+                                     <input type="time" class="form-control form-control-premium" value="@(userToEdit.WorkEndTime?.ToString(@"hh\:mm"))" @onchange="UpdateEndTime" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-12 mt-4">
+                            <h6 class="form-label-primary mb-3 pb-2 border-bottom">Leave Balance Adjustment (@TimeHelper.GetNow().Year)</h6>
+                            @if (leaveBalanceToEdit == null)
+                            {
+                                <div class="text-center py-3">
+                                    <div class="spinner-border spinner-border-sm text-primary"></div>
+                                    <p class="small text-muted mt-2">Fetching leave balances...</p>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label-primary small">Annual Leave (Total)</label>
+                                        <input type="number" class="form-control form-control-premium" @bind="leaveBalanceToEdit.AnnualLeaveTotal" step="0.5" />
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label-primary small">Sick Leave (Total)</label>
+                                        <input type="number" class="form-control form-control-premium" @bind="leaveBalanceToEdit.SickLeaveTotal" step="0.5" />
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label-primary small">Family Resp. (Total)</label>
+                                        <input type="number" class="form-control form-control-premium" @bind="leaveBalanceToEdit.FamilyLeaveTotal" step="0.5" />
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label-primary small">Parental Leave (Total)</label>
+                                        <input type="number" class="form-control form-control-premium" @bind="leaveBalanceToEdit.ParentalLeaveTotal" step="0.5" />
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label-primary small">Maternity (Total)</label>
+                                        <input type="number" class="form-control form-control-premium" @bind="leaveBalanceToEdit.MaternityLeaveTotal" step="0.5" />
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label-primary small">Study Leave (Total)</label>
+                                        <input type="number" class="form-control form-control-premium" @bind="leaveBalanceToEdit.StudyLeaveTotal" step="0.5" />
+                                    </div>
+                                </div>
+                                <div class="alert alert-info border-0 mt-3 small py-2">
+                                    <i class="bi bi-info-circle me-2"></i> Adjusting these totals will immediately update the "Available" days for the employee.
+                                </div>
+                            }
+                        </div>
+
+                        <div class="col-12 mt-4">
+                            <h6 class="form-label-primary mb-3 pb-2 border-bottom">Security & Compliance</h6>
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <div class="form-check form-switch p-3 border rounded-3 bg-white shadow-sm h-100">
+                                        <input class="form-check-input ms-0 me-2" type="checkbox" @bind="userToEdit.EnforceGeofence" id="geoSwitch">
+                                        <label class="form-check-label fw-bold text-dark" for="geoSwitch">Geofencing</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-check form-switch p-3 border rounded-3 bg-white shadow-sm h-100">
+                                        <input class="form-check-input ms-0 me-2" type="checkbox" @bind="userToEdit.EnforceDeviceLock" id="deviceSwitch">
+                                        <label class="form-check-label fw-bold text-dark" for="deviceSwitch">Device Lock</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-check form-switch p-3 border rounded-3 bg-white shadow-sm h-100">
+                                        <input class="form-check-input ms-0 me-2" type="checkbox" @bind="userToEdit.AllowAnyDevice" id="anyDeviceSwitch">
+                                        <label class="form-check-label fw-bold text-dark" for="anyDeviceSwitch">Any Device</label>
+                                    </div>
+                                </div>
+                                @if (!string.IsNullOrEmpty(userToEdit.DeviceId))
+                                {
+                                    <div class="col-12">
+                                        <div class="p-3 border rounded-3 bg-light d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <small class="text-muted text-uppercase fw-bold letter-spacing-wide d-block" style="font-size: 0.65rem;">Currently Locked Device ID</small>
+                                                <code class="text-primary small font-monospace">@userToEdit.DeviceId</code>
+                                            </div>
+                                            <button type="button" class="btn btn-outline-danger btn-sm rounded-pill px-3 shadow-sm" @onclick="() => userToEdit.DeviceId = null">
+                                                <i class="bi bi-unlock-fill me-1"></i> Reset Device Lock
+                                            </button>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top-0 bg-light pb-4 pe-4">
+                    <button type="button" class="btn btn-outline-secondary px-4 rounded-pill" @onclick="() => userToEdit = null">Cancel</button>
+                    <button type="button" class="btn btn-primary px-4 rounded-pill shadow-sm" @onclick="SaveUserChanges">
+                        <i class="bi bi-save-fill me-2"></i> Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Deactivate Confirmation Modal -->
+@if (userToDelete != null)
+{
+    <div class="modal show d-block animate-fade-in" tabindex="-1" style="background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                <div class="modal-header bg-danger text-white border-0 py-3">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-exclamation-triangle-fill me-2"></i> Confirm Action</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => userToDelete = null"></button>
+                </div>
+                <div class="modal-body p-4 text-center">
+                    <div class="mb-3 text-danger">
+                        <i class="bi bi-person-x-fill" style="font-size: 3rem;"></i>
+                    </div>
+                    <h5 class="fw-bold mb-2">Deactivate @userToDelete.Name?</h5>
+                    <p class="text-muted mb-0">The user will be marked as inactive and will no longer be able to check-in or access the system.</p>
+                </div>
+                <div class="modal-footer border-top-0 justify-content-center pb-4">
+                    <button type="button" class="btn btn-light px-4 rounded-pill" @onclick="() => userToDelete = null">Keep User</button>
+                    <button type="button" class="btn btn-danger px-4 rounded-pill shadow-sm" @onclick="ConfirmDeleteAction">
+                        Confirm Deactivation
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<User>? allUsers;
+    private List<User> filteredUsers = new();
+    private List<User> paginatedUsers = new();
+    private List<Branch> branches = new();
+    
+    private User? userToDelete;
+    private User? userToView;
+    private User? userToEdit;
+    private LeaveBalance? leaveBalanceToEdit; 
+    private List<Africanideasfaceapi.Models.Attendance>? userRecords;
+    private List<Absence>? userAbsences;
+    private LeaveBalance? userLeaveBalance;
+    
+    private string? SuccessMessage;
+    private string? ErrorMessage;
+    
+    private bool isLoading = true;
+    private bool isAuthenticated;
+    private bool isAdmin;
+    private User? currentUser;
+
+    // Search and filter state
+    private string searchQuery = string.Empty;
+    private string filterRegistrationMethod = string.Empty;
+    private string filterStatus = string.Empty;
+    private int currentPage = 1;
+    private int pageSize = 25;
+    private int totalPages = 1;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            CheckAuth();
+            if (isAuthenticated && isAdmin)
+            {
+                await LoadUsers();
+            }
+        }
+    }
+
+    private void CheckAuth()
+    {
+        isAuthenticated = Auth.IsAuthenticated;
+        isAdmin = Auth.IsAdmin;
+        currentUser = Auth.CurrentUser;
+        // Do not clear loading for admins here — a render would show the full page with an
+        // empty list until LoadUsers() completes. Only stop loading when we will not fetch.
+        if (!isAuthenticated || !isAdmin)
+        {
+            isLoading = false;
+        }
+        StateHasChanged();
+    }
+
+    private async Task LoadUsers()
+    {
+        try
+        {
+            isLoading = true;
+            ErrorMessage = null;
+            allUsers = await UserService.GetAllUsersAsync();
+            branches = await BranchService.GetAllBranchesAsync();
+            ApplyFilters();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error loading users: {ex.Message}";
+            allUsers = null;
+            filteredUsers = new List<User>();
+            paginatedUsers = new List<User>();
+        }
+        finally
+        {
+            isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        try
+        {
+            if (allUsers == null) return;
+
+            filteredUsers = allUsers.ToList();
+
+            // Apply search filter
+            if (!string.IsNullOrWhiteSpace(searchQuery))
+            {
+                var query = searchQuery.ToLower();
+                filteredUsers = filteredUsers.Where(u => 
+                    u.Name.ToLower().Contains(query) ||
+                    u.Email.ToLower().Contains(query) ||
+                    (u.IdNumber != null && u.IdNumber.ToLower().Contains(query))
+                ).ToList();
+            }
+
+            // Apply registration method filter
+            if (!string.IsNullOrWhiteSpace(filterRegistrationMethod))
+            {
+                filteredUsers = filteredUsers.Where(u => u.RegistrationMethod == filterRegistrationMethod).ToList();
+            }
+
+            // Apply status filter
+            if (!string.IsNullOrWhiteSpace(filterStatus))
+            {
+                filteredUsers = filteredUsers.Where(u => u.Status == filterStatus).ToList();
+            }
+
+            // Calculate pagination
+            totalPages = (int)Math.Ceiling(filteredUsers.Count / (double)pageSize);
+            if (currentPage > totalPages && totalPages > 0)
+            {
+                currentPage = totalPages;
+            }
+
+            paginatedUsers = filteredUsers
+                .Skip((currentPage - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error applying filters: {ex.Message}";
+        }
+    }
+
+    private void HandleSearch()
+    {
+        currentPage = 1;
+        ApplyFilters();
+    }
+
+    private void HandleFilter()
+    {
+        currentPage = 1;
+        ApplyFilters();
+    }
+
+    private void ClearFilters()
+    {
+        searchQuery = string.Empty;
+        filterRegistrationMethod = string.Empty;
+        filterStatus = string.Empty;
+        currentPage = 1;
+        ApplyFilters();
+    }
+
+    private void ChangePage(int page)
+    {
+        currentPage = Math.Max(1, Math.Min(page, totalPages));
+        ApplyFilters();
+    }
+
+    private void HandlePageSizeChange()
+    {
+        currentPage = 1;
+        ApplyFilters();
+    }
+
+    private void ConfirmDelete(User user)
+    {
+        userToDelete = user;
+    }
+
+    private async Task ConfirmDeleteAction()
+    {
+        if (userToDelete == null) return;
+
+        try
+        {
+             var result = await UserService.DeleteUserAsync(userToDelete.Id, FaceApiService);
+
+            if (result)
+            {
+                SuccessMessage = $"User {userToDelete.Name} has been deactivated.";
+                AuditService.LogAdminAction(currentUser?.Id ?? "Admin", userToDelete.Id, "DeactivateUser", userToDelete.Id, userToDelete.Email);
+                userToDelete = null;
+                await LoadUsers();
+            }
+            else
+            {
+                ErrorMessage = "Failed to deactivate user.";
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task ViewUserDetails(User user)
+    {
+        userToView = user;
+        userLeaveBalance = null;
+        userRecords = null;
+        userAbsences = null;
+        
+        // Load data in parallel
+        var leaveTask = LeaveService.GetOrCreateBalanceAsync(user.Id, TimeHelper.GetNow().Year);
+        var attendanceTask = AttendanceService.GetEmployeeAttendanceAsync(user.Id);
+        var absenceTask = AbsenceService.GetEmployeeAbsencesAsync(user.Id); // Assuming you implemented this in AbsenceService
+        
+        await Task.WhenAll(leaveTask, attendanceTask, absenceTask);
+        
+        userLeaveBalance = await leaveTask;
+        userRecords = await attendanceTask;
+        userAbsences = await absenceTask;
+    }
+
+    private void EditUser(User user)
+    {
+        // Clone for safe editing
+        userToEdit = new User
+        {
+            Id = user.Id,
+            Name = user.Name,
+            Surname = user.Surname,
+            Email = user.Email,
+            PhoneNumber = user.PhoneNumber,
+            IdNumber = user.IdNumber,
+            Role = user.Role,
+            RegistrationMethod = user.RegistrationMethod,
+            BranchId = user.BranchId,
+            WorkStartTime = user.WorkStartTime,
+            WorkEndTime = user.WorkEndTime,
+            PersonId = user.PersonId,
+            ImageBase64 = user.ImageBase64,
+            DocumentImagePath = user.DocumentImagePath,
+            IsActive = user.IsActive,
+            Status = user.Status,
+            EnforceGeofence = user.EnforceGeofence,
+            EnforceDeviceLock = user.EnforceDeviceLock,
+            DeviceId = user.DeviceId,
+            WorkType = user.WorkType,
+            HybridWorkDays = user.HybridWorkDays != null ? new List<string>(user.HybridWorkDays) : new List<string>(),
+            AllowAnyDevice = user.AllowAnyDevice
+        };
+        
+        // Fetch balance for editing
+        Task.Run(async () => {
+            leaveBalanceToEdit = await LeaveService.GetOrCreateBalanceAsync(user.Id, TimeHelper.GetNow().Year);
+            await InvokeAsync(StateHasChanged);
+        });
+    }
+
+    private async Task SaveUserChanges()
+    {
+        if (userToEdit == null) return;
+
+        try
+        {
+            var updated = await UserService.UpdateUserAsync(userToEdit);
+            
+            // Save balance adjustments if any
+            if (leaveBalanceToEdit != null)
+            {
+                await LeaveService.UpdateBalanceAsync(leaveBalanceToEdit);
+            }
+
+            if (updated != null)
+            {
+                SuccessMessage = $"User {userToEdit.Name} updated successfully.";
+                AuditService.LogAdminAction(currentUser?.Id ?? "Admin", userToEdit.Id, "UpdateUser", userToEdit.Id, userToEdit.Email);
+                userToEdit = null;
+                await LoadUsers();
+            }
+            else
+            {
+                ErrorMessage = "Failed to update user.";
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task ApproveUser(User user)
+    {
+        try
+        {
+            user.Status = "Approved";
+            var updated = await UserService.UpdateUserAsync(user);
+            if (updated != null)
+            {
+                SuccessMessage = $"User {user.Name} has been approved.";
+                AuditService.LogAdminAction(currentUser?.Id ?? "Admin", user.Id, "ApproveUser", user.Id, user.Email);
+                await LoadUsers();
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error: {ex.Message}";
+        }
+    }
+
+    private void UpdateStartTime(ChangeEventArgs e)
+    {
+        if (userToEdit != null && TimeSpan.TryParse(e.Value?.ToString(), out var time))
+            userToEdit.WorkStartTime = time;
+    }
+
+    private void UpdateEndTime(ChangeEventArgs e)
+    {
+        if (userToEdit != null && TimeSpan.TryParse(e.Value?.ToString(), out var time))
+            userToEdit.WorkEndTime = time;
+    }
+
+    private void ToggleHybridDay(DayOfWeek day)
+    {
+        if (userToEdit == null) return;
+        userToEdit.HybridWorkDays ??= new List<string>();
+        if (userToEdit.HybridWorkDays.Contains(day.ToString()))
+            userToEdit.HybridWorkDays.Remove(day.ToString());
+        else
+            userToEdit.HybridWorkDays.Add(day.ToString());
+    }
+
+    private async Task HandleLogout()
+    {
+        await Auth.LogoutAsync();
+        Navigation.NavigateTo("/login", true);
+    }
+}

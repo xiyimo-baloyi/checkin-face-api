@@ -1,0 +1,633 @@
+@* BiometricCapture - Optimized camera + liveness + face detection component *@
+@using Microsoft.JSInterop
+@inject IJSRuntime JSRuntime
+@inject ILogger<BiometricCapture> Logger
+@inject LivenessSessionService LivenessSessions
+@implements IAsyncDisposable
+
+<style>
+    :root {
+        --glass-bg: rgba(20, 20, 25, 0.85);
+        --glass-border: rgba(255, 255, 255, 0.15);
+        --accent-color: #3b82f6;
+        --success-color: #10b981;
+        --warning-color: #f59e0b;
+    }
+
+    .biometric-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: radial-gradient(circle at center, rgba(0,0,0,0.85) 0%, #000 100%);
+        backdrop-filter: blur(8px);
+        z-index: 1050;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .biometric-card {
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+        border-radius: 2rem;
+        overflow: hidden;
+        width: 95%;
+        max-width: 900px;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        position: relative;
+    }
+
+    .video-viewport {
+        position: relative;
+        height: 60vh;
+        min-height: 400px;
+        max-height: 650px;
+        background: #000;
+        border-radius: 1.5rem;
+        margin: 1rem;
+        overflow: hidden;
+    }
+
+    #video-camera-login {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transform: scaleX(-1); /* Mirror effect */
+    }
+
+    .face-scanner-overlay {
+        position: absolute;
+        inset: 0;
+        border: 2px solid rgba(255,255,255,0.1);
+        pointer-events: none;
+        z-index: 5;
+    }
+
+    .face-guideline {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 240px;
+        height: 320px;
+        border: 3px solid rgba(255,255,255,0.3);
+        border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 0 0 1000px rgba(0,0,0,0.4);
+    }
+
+    .face-guideline.active {
+        border-color: var(--success-color);
+        box-shadow: 0 0 0 1000px rgba(0,0,0,0.2), 0 0 20px var(--success-color);
+        transform: translate(-50%, -50%) scale(1.05);
+    }
+
+    .status-panel {
+        position: absolute;
+        top: 1.5rem;
+        left: 1.5rem;
+        right: 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        pointer-events: none;
+        z-index: 10;
+    }
+
+    .instruction-badge {
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(4px);
+        padding: 0.75rem 1.25rem;
+        border-radius: 1rem;
+        border: 1px solid rgba(255,255,255,0.1);
+        color: #fff;
+        max-width: 250px;
+        animation: slideInDown 0.5s ease-out;
+    }
+
+    .diagnostic-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .diagnostic-item {
+        background: rgba(0, 0, 0, 0.6);
+        padding: 0.4rem 0.8rem;
+        border-radius: 0.75rem;
+        font-size: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        color: rgba(255,255,255,0.8);
+        border: 1px solid rgba(255,255,255,0.05);
+        transition: all 0.3s ease;
+    }
+
+    .diagnostic-item.active {
+        background: rgba(16, 185, 129, 0.2);
+        color: #fff;
+        border-color: rgba(16, 185, 129, 0.3);
+    }
+
+    .dot-indicator {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #4b5563;
+    }
+
+    .active .dot-indicator {
+        background: var(--success-color);
+        box-shadow: 0 0 8px var(--success-color);
+    }
+
+    .control-footer {
+        padding: 1.5rem 2rem;
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+    }
+
+    .action-btn {
+        padding: 1rem 2.5rem;
+        border-radius: 1.25rem;
+        font-weight: 700;
+        transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        border: none;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+    }
+
+    @@media (hover: hover) {
+        .action-btn:hover:not(:disabled) {
+            transform: translateY(-4px) scale(1.02);
+        }
+    }
+
+    .btn-capture {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+    }
+
+    .btn-capture:disabled {
+        opacity: 0.4;
+        filter: grayscale(0.5);
+        transform: none;
+    }
+
+    .btn-cancel {
+        background: rgba(255,255,255,0.05);
+        color: rgba(255,255,255,0.8);
+        border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .liveness-icon-container {
+        position: absolute;
+        bottom: 2rem;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 10;
+        text-align: center;
+    }
+
+    .challenge-icon {
+        font-size: 3.5rem;
+        color: var(--warning-color);
+        filter: drop-shadow(0 0 15px rgba(245, 158, 11, 0.5));
+        animation: pulseScale 1.5s infinite ease-in-out;
+    }
+
+    @@keyframes pulseScale {
+        0%, 100% { transform: scale(1); opacity: 0.8; }
+        50% { transform: scale(1.2); opacity: 1; }
+    }
+
+    @@keyframes slideInDown {
+        from { transform: translateY(-20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+    }
+
+    /* Mobile adjustments */
+    @@media (max-width: 576px) {
+        .biometric-card { width: 100%; height: 100%; border-radius: 0; }
+        .video-viewport { height: 70vh; margin: 0; border-radius: 0; }
+        .control-footer { flex-direction: column; padding: 1.5rem; }
+        .action-btn { width: 100%; justify-content: center; }
+    }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .instruction-badge,
+        .challenge-icon {
+            animation: none !important;
+        }
+
+        .face-guideline.active {
+            transform: translate(-50%, -50%);
+        }
+    }
+</style>
+
+<div class="biometric-modal-overlay animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="biometric-capture-title">
+    <div class="biometric-card">
+        <div class="video-viewport">
+            <video id="video-camera-login" autoplay playsinline></video>
+            <canvas id="canvas-camera-login" style="display: none;"></canvas>
+            
+            <div class="face-scanner-overlay">
+                <div class="face-guideline @(isFaceValid && (!RequireLiveness || isLivenessVerified) ? "active" : "")"></div>
+            </div>
+
+            <div class="status-panel">
+                <div class="ui-live-region" aria-live="polite" aria-atomic="true">@validationStatus @livenessInstruction</div>
+                <div class="instruction-badge">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        @if (isFaceValid) { <i class="bi bi-check-circle-fill text-success"></i> }
+                        else { <div class="spinner-border spinner-border-sm text-primary"></div> }
+                        <span id="biometric-capture-title" class="fw-bold x-small text-uppercase tracking-wider">@(isFaceValid ? "Ready" : "Scanning")</span>
+                    </div>
+                    <p class="mb-0 x-small opacity-90">@validationStatus</p>
+                </div>
+
+                <div class="diagnostic-stack">
+                    <div class="diagnostic-item @(validationResults.FaceDetected ? "active" : "")">
+                        <div class="dot-indicator"></div>
+                        <span>Face Detected</span>
+                    </div>
+                    <div class="diagnostic-item @(validationResults.FaceCentered ? "active" : "")">
+                        <div class="dot-indicator"></div>
+                        <span>Centered</span>
+                    </div>
+                    <div class="diagnostic-item @(validationResults.LightingGood ? "active" : "")">
+                        <div class="dot-indicator"></div>
+                        <span>Lighting</span>
+                    </div>
+                    @if (RequireLiveness)
+                    {
+                        <div class="diagnostic-item @(isLivenessVerified ? "active" : livenessState == LivenessState.Failed ? "bg-danger bg-opacity-20 border-danger" : "")">
+                            <div class="dot-indicator"></div>
+                            <span>Liveness Check</span>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @if (livenessState == LivenessState.Challenging)
+            {
+                <div class="liveness-icon-container">
+                    <div class="instruction-badge mb-3 w-100 mx-auto">
+                        <span class="fw-bold">@livenessInstruction</span>
+                    </div>
+                    @if (currentChallengeType == "turnLeft") { <i class="bi bi-arrow-left-circle-fill challenge-icon"></i> }
+                    else if (currentChallengeType == "turnRight") { <i class="bi bi-arrow-right-circle-fill challenge-icon"></i> }
+                    else if (currentChallengeType == "comeCloser") { <i class="bi bi-zoom-in challenge-icon"></i> }
+                    else if (currentChallengeType == "moveUpDown") { <i class="bi bi-arrows-vertical challenge-icon"></i> }
+                </div>
+            }
+
+            @if (livenessState == LivenessState.Failed || livenessState == LivenessState.TimedOut)
+            {
+                <div class="liveness-icon-container">
+                     <button type="button" class="btn btn-warning rounded-pill px-4 shadow-lg fw-bold" @onclick="RetryLiveness">
+                        <i class="bi bi-arrow-repeat me-1"></i> Retry Check
+                    </button>
+                </div>
+            }
+        </div>
+
+        <div class="control-footer">
+            <button type="button" class="action-btn btn-cancel" @onclick="HandleCancel" disabled="@isCapturing">Cancel</button>
+            <button type="button" class="action-btn btn-capture" @onclick="CapturePhoto" disabled="@(!CanCapture)">
+                @if (isCapturing)
+                {
+                    <span class="spinner-border spinner-border-sm"></span>
+                    <span>Processing...</span>
+                }
+                else
+                {
+                    <i class="bi @(RequireLiveness && !isLivenessVerified ? "bi-shield-lock" : "bi-camera-fill") fs-5"></i>
+                    <span>@(RequireLiveness && !isLivenessVerified ? "Complete movement check" : "Verify Identity")</span>
+                }
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    // === Parameters ===
+    [Parameter] public bool RequireLiveness { get; set; } = true;
+    [Parameter] public bool MultiFrameEnabled { get; set; } = true;
+    [Parameter] public int MultiFrameCount { get; set; } = 3;
+    [Parameter] public int LivenessStartupDelayMs { get; set; } = 350;
+    [Parameter] public Dictionary<string, object>? LivenessOptions { get; set; }
+    [Parameter] public EventCallback<CaptureResult> OnPhotoCaptured { get; set; }
+    [Parameter] public EventCallback OnCancelled { get; set; }
+
+    // === State ===
+    private enum LivenessState { Idle, Challenging, Verifying, Passed, Failed, TimedOut }
+    private LivenessState livenessState = LivenessState.Idle;
+    private bool isLivenessVerified => livenessState == LivenessState.Passed;
+    private string currentChallengeType = string.Empty;
+    private string livenessInstruction = "Align face in frame";
+    private string validationStatus = "Initializing camera...";
+    private bool isFaceValid = false;
+    private bool isCapturing = false;
+    private bool _disposed = false;
+    private string currentFacingMode = "user";
+
+    private ValidationResults validationResults = new();
+    private string? _lastValidationStatus;
+    private bool _lastFaceValid;
+
+    private bool CanCapture => isFaceValid && !isCapturing && (!RequireLiveness || isLivenessVerified);
+
+    // === JS References ===
+    private IJSObjectReference? jsModule;
+    private IJSObjectReference? faceDetectionModule;
+    private IJSObjectReference? livenessModule;
+    private DotNetObjectReference<BiometricCapture>? selfReference;
+    private System.Threading.Timer? validationTimer;
+
+    // === Captured Data ===
+    private readonly List<byte[]> capturedFrames = new();
+    private string? _livenessToken;
+
+    // === Lifecycle ===
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            selfReference = DotNetObjectReference.Create(this);
+
+            try {
+                jsModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/camera.js");
+                faceDetectionModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/face-detection.js");
+                livenessModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/liveness-detection.js");
+            } catch (Exception ex) {
+                Logger.LogError(ex, "Failed to load biometric modules");
+            }
+
+            await StartCamera();
+        }
+    }
+
+    private async Task StartCamera()
+    {
+        if (jsModule == null) return;
+
+        try
+        {
+            await jsModule.InvokeVoidAsync("startCamera", "video-camera-login", currentFacingMode);
+            await Task.Delay(200);
+            StartFaceValidation();
+            validationStatus = "Position your face in the frame";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to start camera");
+            validationStatus = "Camera error. Check permissions.";
+        }
+        StateHasChanged();
+    }
+
+    private void StartFaceValidation()
+    {
+        if (_disposed) return;
+        validationTimer?.Dispose();
+
+        // Keep validation cadence conservative to reduce CPU pressure on lower-power laptops.
+        validationTimer = new System.Threading.Timer(async _ =>
+        {
+            if (faceDetectionModule != null && !isCapturing && !_disposed && livenessState != LivenessState.Challenging)
+            {
+                try { await faceDetectionModule.InvokeVoidAsync("validateFaceInFrame", "video-camera-login", selfReference); }
+                catch { }
+            }
+        }, null, 0, 450);
+
+        if (RequireLiveness && livenessModule != null)
+        {
+            livenessState = LivenessState.Idle;
+            var delay = Math.Max(0, LivenessStartupDelayMs);
+            var livenessOpts = LivenessOptions;
+            _ = InvokeAsync(async () =>
+            {
+                try
+                {
+                    if (delay > 0) await Task.Delay(delay);
+                    _livenessToken = LivenessSessions.CreateSession();
+                    livenessState = LivenessState.Challenging;
+                    await livenessModule.InvokeVoidAsync(
+                        "startLivenessChallenge", "video-camera-login", selfReference, livenessOpts);
+                    await InvokeAsync(StateHasChanged);
+                }
+                catch { }
+            });
+        }
+        else
+        {
+            livenessState = LivenessState.Passed;
+        }
+    }
+
+    private async Task RetryLiveness()
+    {
+        if (livenessModule == null) return;
+        livenessState = LivenessState.Idle;
+        StateHasChanged();
+        await livenessModule.InvokeVoidAsync("resetLivenessChallenge");
+        await Task.Delay(150);
+        _livenessToken = LivenessSessions.CreateSession();
+        livenessState = LivenessState.Challenging;
+        await livenessModule.InvokeVoidAsync(
+            "startLivenessChallenge", "video-camera-login", selfReference, LivenessOptions);
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnFaceValidationResult(FaceValidationResult result)
+    {
+        if (_disposed || isCapturing) return;
+
+        var validationChanged =
+            validationResults.FaceDetected != result.FaceDetected ||
+            validationResults.FaceCentered != result.FaceCentered ||
+            validationResults.LightingGood != result.LightingGood ||
+            validationResults.PoseGood != result.PoseGood ||
+            validationResults.SizeGood != result.SizeGood;
+
+        validationResults.FaceDetected = result.FaceDetected;
+        validationResults.FaceCentered = result.FaceCentered;
+        validationResults.LightingGood = result.LightingGood;
+        validationResults.PoseGood = result.PoseGood;
+        validationResults.SizeGood = result.SizeGood;
+
+        if (livenessState != LivenessState.Challenging)
+        {
+            isFaceValid = result.IsValid;
+            validationStatus = result.Message;
+        }
+        else
+        {
+            isFaceValid = result.FaceDetected;
+        }
+
+        var requiresRender =
+            validationChanged ||
+            _lastFaceValid != isFaceValid ||
+            !string.Equals(_lastValidationStatus, validationStatus, StringComparison.Ordinal);
+
+        if (requiresRender)
+        {
+            _lastFaceValid = isFaceValid;
+            _lastValidationStatus = validationStatus;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static bool IsLivenessMovementChallenge(string status) =>
+        status is "turnLeft" or "turnRight" or "comeCloser" or "moveUpDown";
+
+    [JSInvokable]
+    public void OnLivenessChallengeUpdate(string status, string message)
+    {
+        if (_disposed) return;
+        if (IsLivenessMovementChallenge(status))
+            currentChallengeType = status;
+
+        if (status == "completed")
+        {
+            livenessState = LivenessState.Passed;
+            if (!string.IsNullOrEmpty(_livenessToken))
+            {
+                LivenessSessions.MarkCompleted(_livenessToken);
+            }
+            livenessInstruction = "Ready to capture";
+            validationStatus = "Perfect! Tap the button below.";
+            isFaceValid = true;
+        }
+        else if (status == "error" || status == "timeout")
+        {
+            livenessState = status == "timeout" ? LivenessState.TimedOut : LivenessState.Failed;
+            livenessInstruction = "Verification Failed";
+            validationStatus = message;
+        }
+        else
+        {
+            livenessState = LivenessState.Challenging;
+            livenessInstruction = message;
+        }
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CapturePhoto()
+    {
+        if (!CanCapture || jsModule == null) return;
+
+        isCapturing = true;
+        validationTimer?.Change(Timeout.Infinite, Timeout.Infinite); 
+        StateHasChanged();
+
+        try
+        {
+            var imageDataUrl = await jsModule.InvokeAsync<string>("capturePhoto", "video-camera-login", "canvas-camera-login");
+            if (string.IsNullOrEmpty(imageDataUrl)) return;
+
+            var base64Data = imageDataUrl.Split(',')[1];
+            var primaryImageBytes = Convert.FromBase64String(base64Data);
+            capturedFrames.Clear();
+            capturedFrames.Add(primaryImageBytes);
+
+            if (MultiFrameEnabled && MultiFrameCount > 1)
+            {
+                // Faster burst capture (250ms instead of 450ms)
+                for (int i = 1; i < MultiFrameCount; i++)
+                {
+                    await Task.Delay(250);
+                    var nextUrl = await jsModule.InvokeAsync<string>("capturePhoto", "video-camera-login", "canvas-camera-login");
+                    if (!string.IsNullOrEmpty(nextUrl))
+                        capturedFrames.Add(Convert.FromBase64String(nextUrl.Split(',')[1]));
+                }
+            }
+
+            await StopCamera();
+
+            await OnPhotoCaptured.InvokeAsync(new CaptureResult
+            {
+                ImagePreview = imageDataUrl,
+                PrimaryImage = primaryImageBytes,
+                Frames = new List<byte[]>(capturedFrames),
+                LivenessVerified = isLivenessVerified,
+                LivenessToken = _livenessToken
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Photo capture failed");
+            validationStatus = "Capture failed. Try again.";
+            isCapturing = false;
+            validationTimer?.Change(0, 450);
+            StateHasChanged();
+        }
+    }
+
+    private async Task StopCamera()
+    {
+        validationTimer?.Dispose();
+        validationTimer = null;
+        try {
+            if (livenessModule != null) await livenessModule.InvokeVoidAsync("stopLivenessChallenge");
+            if (jsModule != null) await jsModule.InvokeVoidAsync("stopCamera", "video-camera-login");
+        } catch { }
+    }
+
+    private async Task HandleCancel()
+    {
+        await StopCamera();
+        await OnCancelled.InvokeAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        await StopCamera();
+        selfReference?.Dispose();
+        try {
+            if (jsModule != null) await jsModule.DisposeAsync();
+            if (faceDetectionModule != null) await faceDetectionModule.DisposeAsync();
+            if (livenessModule != null) await livenessModule.DisposeAsync();
+        } catch { }
+    }
+
+    public class CaptureResult {
+        public string ImagePreview { get; set; } = string.Empty;
+        public byte[] PrimaryImage { get; set; } = Array.Empty<byte>();
+        public List<byte[]> Frames { get; set; } = new();
+        public bool LivenessVerified { get; set; }
+        public string? LivenessToken { get; set; }
+    }
+
+    public class ValidationResults {
+        public bool FaceDetected { get; set; }
+        public bool FaceCentered { get; set; }
+        public bool LightingGood { get; set; }
+        public bool PoseGood { get; set; }
+        public bool SizeGood { get; set; }
+    }
+
+    public class FaceValidationResult {
+        public bool FaceDetected { get; set; }
+        public bool FaceCentered { get; set; }
+        public bool LightingGood { get; set; }
+        public bool PoseGood { get; set; }
+        public bool SizeGood { get; set; }
+        public bool IsValid { get; set; }
+        public string Message { get; set; } = string.Empty;
+    }
+}

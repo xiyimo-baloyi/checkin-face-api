@@ -1,0 +1,401 @@
+@inherits LayoutComponentBase
+@using Africanideasfaceapi.Services
+@using Africanideasfaceapi.Helpers
+@inject AuthService AuthService
+@inject UserService UserService
+@inject SettingsService AppSettingsService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject AppNotificationService NotificationService
+@using Microsoft.AspNetCore.SignalR.Client
+@using System.Threading.Tasks
+@implements IAsyncDisposable
+
+<div class="layout-dashboard animate-fade-in">
+    <!-- Mobile Sidebar Overlay -->
+    <div class="sidebar-overlay @(isSidebarOpen ? "show" : "")" @onclick="CloseSidebar"></div>
+
+    <!-- Sidebar Area -->
+    <aside class="area-sidebar glass-panel @(isSidebarOpen ? "sidebar-open" : "")" style="border-right: 1px solid rgba(255,255,255,0.2);">
+        <div class="d-flex align-items-center justify-content-center p-4 border-bottom border-light border-opacity-10">
+            <a href="/" class="d-flex align-items-center gap-2 text-decoration-none" @onclick="CloseSidebar">
+                <div class="rounded d-flex align-items-center justify-content-center overflow-hidden" style="width: 45px; height: 45px;">
+                    <img src="/images/african-ideas-logo.png" alt="African Ideas Logo" class="h-100" />
+                </div>
+                <div class="d-flex flex-column">
+                    <span class="fw-bold text-white letter-spacing-wide" style="font-size: 0.9rem;">AFRICAN IDEAS</span>
+                    <span class="text-white text-opacity-50" style="font-size: 0.7rem;">ATTENDANCE</span>
+                </div>
+            </a>
+            <!-- Mobile Close Button (Optional, usually overlay click is enough but good for accessibility) -->
+            <button class="btn btn-link text-white d-lg-none ms-auto p-0" @onclick="CloseSidebar">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        
+        <div class="p-3" style="overflow-y: auto; height: calc(100vh - 80px);">
+            <NavMenu />
+        </div>
+    </aside>
+
+    <!-- Header Area -->
+    <header class="area-header glass-panel px-4 d-flex align-items-center justify-content-between" style="border-bottom: 1px solid rgba(255,255,255,0.5);">
+        <div class="d-flex align-items-center gap-2">
+            <!-- Mobile Menu Toggle -->
+            <button class="btn btn-primary btn-sm rounded shadow-sm d-lg-none p-2 " @onclick="ToggleSidebar" aria-label="Toggle navigation">
+                <i class="bi bi-list fs-4 text-white"></i>
+            </button>
+
+            <h5 class="mb-0 fw-bold text-primary text-truncate ms-1" style="max-width: 160px; font-size: 0.95rem;">@GetPageTitle()</h5>
+        </div>
+
+        <div class="d-flex align-items-center gap-4">
+            <!-- Time/Date Display -->
+            <!-- Notification Bell -->
+            @if (AuthService.IsAuthenticated && AuthService.CurrentUser != null)
+            {
+                <button type="button" class="btn border-0 position-relative transition-all hover-translate-y d-flex align-items-center justify-content-center" 
+                     @onclick='() => Navigation.NavigateTo("/notifications")'
+                     aria-label="@(unreadCount > 0 ? $"{unreadCount} unread notifications" : "Notifications")"
+                     style="width: 44px; height: 44px; background: rgba(0,0,0,0.03); border-radius: 12px;">
+                    <i class="bi bi-bell fs-5 text-dark opacity-75" aria-hidden="true"></i>
+                    @if (unreadCount > 0)
+                    {
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-white" 
+                              style="font-size: 0.6rem; padding: 0.35em 0.5em; margin-top: 5px; margin-left: -5px;">
+                            @unreadCount
+                        </span>
+                    }
+                </button>
+            }
+
+            <!-- User Profile Section -->
+            @if (AuthService.IsAuthenticated && AuthService.CurrentUser != null)
+            {
+                <div class="d-flex align-items-center gap-2 px-2 py-1 rounded-pill bg-white bg-opacity-50 border border-white border-opacity-50 shadow-sm">
+                    <div class="rounded-circle @GetConnectionStatusClass()" 
+                         style="width: 8px; height: 8px;" 
+                         title="@connectionStatus"></div>
+                    <span class="x-small fw-bold text-muted d-none d-md-inline" style="font-size: 0.6rem;">@connectionStatus</span>
+                </div>
+
+                <a href="/profile" class="d-flex align-items-center gap-3 cursor-pointer p-2 rounded-pill bg-white bg-opacity-50 border border-white border-opacity-50 text-decoration-none transition-all hover-translate-y shadow-sm px-3">
+                    <div class="d-flex flex-column lh-1 d-none d-sm-flex text-end">
+                        <span class="fw-bold text-dark mb-1" style="font-size: 0.85rem;">@AuthService.CurrentUser.Name</span>
+                        <span class="text-muted text-uppercase fw-bold letter-spacing-wide" style="font-size: 0.6rem;">@AuthService.CurrentUser.Role</span>
+                    </div>
+                    <div class="rounded-circle border border-2 border-white shadow-sm overflow-hidden" style="width: 38px; height: 38px;">
+                        @if (!string.IsNullOrEmpty(AuthService.CurrentUser.ImageBase64))
+                        {
+                            <img src="data:image/jpeg;base64,@AuthService.CurrentUser.ImageBase64" alt="Profile" class="w-100 h-100" style="object-fit: cover;" />
+                        }
+                        else
+                        {
+                            <div class="w-100 h-100 bg-primary bg-gradient d-flex align-items-center justify-content-center text-white fw-bold">
+                                @(AuthService.CurrentUser.Name.Length > 0 ? AuthService.CurrentUser.Name[0].ToString() : "U")
+                            </div>
+                        }
+                    </div>
+                </a>
+            }
+        </div>
+    </header>
+
+    <!-- MainContent Area -->
+    <main class="area-main p-3 p-md-4" style="overflow-y: auto;">
+        @if (showSessionExpiredMessage)
+        {
+            <div class="alert alert-info alert-dismissible fade show rounded-3 shadow-sm mb-3" role="alert">
+                <i class="bi bi-info-circle me-2"></i>Session expired; page was refreshed.
+                <button type="button" class="btn-close" aria-label="Close" @onclick="DismissSessionExpiredMessage"></button>
+            </div>
+        }
+        <div class="container-fluid p-0 pb-5 mb-5 mb-lg-0">
+            <ErrorBoundary @ref="errorBoundary">
+                <ChildContent>
+                    @Body
+                </ChildContent>
+                <ErrorContent>
+                    <div class="alert alert-danger d-flex align-items-center gap-3 p-4 rounded-4 shadow-sm" role="alert">
+                        <i class="bi bi-exclamation-triangle-fill fs-1 text-danger"></i>
+                        <div class="flex-grow-1">
+                            <h5 class="fw-bold mb-2">Something went wrong</h5>
+                            <p class="mb-0">An error occurred while loading this page. You can try refreshing or return to the dashboard.</p>
+                        </div>
+                        <button class="btn btn-outline-danger rounded-pill" @onclick="RecoverFromError">Try Again</button>
+                        <a href="/" class="btn btn-primary rounded-pill">Go to Dashboard</a>
+                    </div>
+                </ErrorContent>
+            </ErrorBoundary>
+        </div>
+
+        <footer class="mt-auto pt-4 text-center text-muted small opacity-50 d-none d-lg-block">
+            <p>&copy; @TimeHelper.GetNow().Year African Ideas | Secured Attendance System</p>
+        </footer>
+    </main>
+
+    <!-- Mobile Bottom Navigation -->
+    <BottomNav />
+</div>
+
+
+
+<style>
+    .shadow-success-glow {
+        box-shadow: 0 0 5px rgba(25, 135, 84, 0.5);
+    }
+    
+    .animate-pulse {
+        animation: pulse 1.5s infinite;
+    }
+    
+    @@keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.4; }
+        100% { opacity: 1; }
+    }
+</style>
+
+@code {
+    private bool isSidebarOpen = false;
+    private ErrorBoundary? errorBoundary;
+    private bool showSessionExpiredMessage = false;
+    private int unreadCount = 0;
+    private HubConnection? hubConnection;
+    private DotNetObjectReference<MainLayout>? objRef;
+    private string connectionStatus = "Synced";
+    private HubConnectionState hubState = HubConnectionState.Disconnected;
+
+    private void DismissSessionExpiredMessage()
+    {
+        showSessionExpiredMessage = false;
+        StateHasChanged();
+    }
+
+    private void RecoverFromError()
+    {
+        errorBoundary?.Recover();
+    }
+
+    private void ToggleSidebar()
+    {
+        isSidebarOpen = !isSidebarOpen;
+    }
+
+    private void CloseSidebar()
+    {
+        isSidebarOpen = false;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        CheckCompliance();
+        Navigation.LocationChanged += HandleLocationChanged;
+        
+        if (AuthService.IsAuthenticated)
+        {
+            await UpdateUnreadCount();
+            await InitializeSignalR();
+        }
+    }
+
+    [JSInvokable]
+    public async Task UpdateUnreadCount()
+    {
+        if (AuthService.IsAuthenticated && AuthService.CurrentUser != null)
+        {
+            try
+            {
+                unreadCount = await NotificationService.GetUnreadCountAsync(AuthService.CurrentUser.Id);
+                await InvokeAsync(StateHasChanged);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error fetching unread count: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task InitializeSignalR()
+    {
+        try
+        {
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(Navigation.ToAbsoluteUri("/hubs/analytics"))
+                .WithAutomaticReconnect()
+                .Build();
+
+            hubConnection.On<string, Notification>("NotificationReceived", async (recipientId, notification) =>
+            {
+                if (AuthService.CurrentUser != null && recipientId == AuthService.CurrentUser.Id)
+                {
+                    await UpdateUnreadCount();
+                }
+            });
+
+            hubConnection.Reconnecting += (error) =>
+            {
+                connectionStatus = "Connecting...";
+                hubState = HubConnectionState.Reconnecting;
+                _ = InvokeAsync(StateHasChanged);
+                return Task.CompletedTask;
+            };
+
+            hubConnection.Reconnected += (connectionId) =>
+            {
+                connectionStatus = "Synced";
+                hubState = HubConnectionState.Connected;
+                _ = InvokeAsync(StateHasChanged);
+                return Task.CompletedTask;
+            };
+
+            hubConnection.Closed += (error) =>
+            {
+                connectionStatus = "Offline";
+                hubState = HubConnectionState.Disconnected;
+                _ = InvokeAsync(StateHasChanged);
+                return Task.CompletedTask;
+            };
+
+            await hubConnection.StartAsync();
+            hubState = hubConnection.State;
+            connectionStatus = "Synced";
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            connectionStatus = "Connection Error";
+            Console.WriteLine($"MainLayout SignalR Init Error: {ex.Message}");
+        }
+    }
+
+    private string GetConnectionStatusClass() => hubState switch
+    {
+        HubConnectionState.Connected => "bg-success shadow-success-glow",
+        HubConnectionState.Reconnecting => "bg-warning animate-pulse",
+        _ => "bg-danger"
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            objRef = DotNetObjectReference.Create(this);
+            try
+            {
+                // `analytics.js` is loaded as a plain script from `/js/analytics.js`.
+                // If the browser had stale assets or the script is blocked, `analytics` might
+                // be undefined; treat this as non-fatal so the circuit keeps rendering.
+                await JSRuntime.InvokeVoidAsync("analytics.registerNotificationHandler", objRef);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Analytics JS not available: {ex.Message}");
+            }
+
+            // Show "Session expired; page was refreshed." when returning after a circuit reload
+            try
+            {
+                var module = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/session-expired.js");
+                var wasExpired = await module.InvokeAsync<bool>("checkAndClearSessionExpired");
+                if (wasExpired)
+                {
+                    showSessionExpiredMessage = true;
+                    StateHasChanged();
+                }
+            }
+            catch { /* non-fatal */ }
+
+            // Enforce Offline Capabilities Setting
+            try 
+            {
+                var settings = await AppSettingsService.GetSettingsAsync();
+                var module = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/offline-toggle.js");
+                await module.InvokeVoidAsync("setOfflineSupport", settings.EnableOfflineAccess ?? true);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error enforcing offline settings: {ex.Message}");
+            }
+
+            // Try to restore session from browser if not authenticated
+            if (!AuthService.IsAuthenticated)
+            {
+                var user = await AuthService.LoadUserFromBrowserAsync();
+                if (user != null)
+                {
+                    // Refresh compliance check after restore
+                    CheckCompliance();
+                    
+                    // If we are on login page and now authenticated, redirect to home
+                    var relativePath = Navigation.ToBaseRelativePath(Navigation.Uri);
+                    if (relativePath.StartsWith("login", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Navigation.NavigateTo("/");
+                    }
+                    StateHasChanged();
+                }
+            }
+            else
+            {
+                // Load profile image from Cosmos when session doesn't hold it (avoids session size limits)
+                await AuthService.EnsureCurrentUserImageLoadedAsync(UserService);
+                StateHasChanged();
+            }
+        }
+    }
+
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs e) 
+    {
+        errorBoundary?.Recover(); // Clear any previous error state when navigating
+        CheckCompliance();
+        CloseSidebar(); // Close sidebar on navigation
+        StateHasChanged(); 
+    }
+
+    private void CheckCompliance()
+    {
+        if (AuthService.IsAuthenticated)
+        {
+            var relativePath = Navigation.ToBaseRelativePath(Navigation.Uri);
+            var user = AuthService.CurrentUser;
+            var lowerPath = relativePath.ToLowerInvariant();
+            if (user != null && user.HasConsented != true &&
+                !lowerPath.StartsWith("compliance/consent") && 
+                !lowerPath.StartsWith("login") && 
+                !lowerPath.StartsWith("register"))
+            {
+                Navigation.NavigateTo("/compliance/consent");
+            }
+        }
+    }
+
+    private string GetPageTitle()
+    {
+        var relativePath = Navigation.ToBaseRelativePath(Navigation.Uri).ToLower();
+        
+        if (string.IsNullOrEmpty(relativePath)) return "Dashboard";
+        if (relativePath.StartsWith("admin/analytics")) return "System Analytics";
+        if (relativePath.StartsWith("admin/users")) return "User Management";
+        if (relativePath.StartsWith("admin/branches")) return "Branch Management";
+        if (relativePath.StartsWith("admin/leave")) return "Leave Approval";
+        if (relativePath.StartsWith("admin")) return "Administration";
+        if (relativePath.StartsWith("leave")) return "My Leave Requests";
+        if (relativePath.StartsWith("profile")) return "Worker Profile";
+        
+        // Capitalize first letter of path segment
+        return System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(relativePath.Split('/')[0]);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Navigation.LocationChanged -= HandleLocationChanged;
+        
+        if (hubConnection != null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+        
+        objRef?.Dispose();
+    }
+}

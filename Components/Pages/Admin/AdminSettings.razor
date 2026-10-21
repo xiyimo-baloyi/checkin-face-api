@@ -1,0 +1,395 @@
+@page "/admin/settings"
+@using Africanideasfaceapi.Models
+@using Africanideasfaceapi.Services
+@inject SettingsService SettingsService
+@inject NavigationManager Navigation
+@inject AuthService Auth
+@inject IJSRuntime JS
+
+<PageTitle>System Configuration - Biometric Intelligence Hub</PageTitle>
+
+<div class="container-fluid animate-fade-in pb-5 mt-4">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-5 gap-3">
+        <div class="d-flex align-items-center gap-3">
+            <div class="bg-white rounded-circle p-1 d-flex align-items-center justify-content-center shadow-sm animate-float" style="width: 55px; height: 55px;">
+                <img src="/images/african-ideas-logo.png" alt="Logo" class="w-100" />
+            </div>
+            <div>
+                <h1 class="h2 fw-bold text-gradient mb-1">Command Configuration</h1>
+                <p class="text-muted mb-0 small text-uppercase letter-spacing-wide fw-bold opacity-75">Global System Orchestration & Policy Enforcement</p>
+            </div>
+        </div>
+        <div class="d-flex gap-3 w-100 w-md-auto">
+            <button class="btn btn-white rounded-pill px-4 shadow-sm border-0 fw-bold transition-all hover-translate-y" @onclick="LoadSettings" disabled="@isSaving">
+                <i class="bi bi-arrow-clockwise me-2"></i> Reset
+            </button>
+            <button class="btn btn-primary rounded-pill px-5 shadow-lg fw-bold transition-all hover-translate-y d-flex align-items-center gap-2" @onclick="SaveSettings" disabled="@isSaving">
+                @if (isSaving)
+                {
+                    <span class="spinner-border spinner-border-sm" role="status"></span>
+                    <span>Syncing...</span>
+                }
+                else
+                {
+                    <i class="bi bi-shield-check"></i>
+                    <span>Apply Protocol</span>
+                }
+            </button>
+        </div>
+    </div>
+
+    @if (settings == null)
+    {
+        <div class="d-flex flex-column align-items-center justify-content-center py-5">
+            <div class="spinner-grow text-primary mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
+            <p class="text-muted fw-bold animate-pulse">Initializing system intelligence...</p>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            <!-- Workforce & Policy -->
+            <div class="col-12 col-xl-8">
+                <div class="row g-4">
+                    <!-- Workforce Command Center -->
+                    <div class="col-md-6">
+                        <div class="glass-panel p-4 h-100 bg-white">
+                            <div class="d-flex align-items-center gap-3 mb-4">
+                                <div class="section-icon bg-primary bg-opacity-10 text-primary">
+                                    <i class="bi bi-clock-history"></i>
+                                </div>
+                                <h5 class="fw-bold mb-0">Workforce Command</h5>
+                            </div>
+
+                            <div class="settings-group">
+                                <div class="row g-3">
+                                    <div class="col-6">
+                                        <label class="form-label-primary">Shift Start</label>
+                                        <input type="time" class="form-control form-control-premium" @bind="settings.StandardStartTime" />
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label-primary">Shift End</label>
+                                        <input type="time" class="form-control form-control-premium" @bind="settings.StandardEndTime" />
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label-primary">Standard Hours</label>
+                                        <div class="input-group">
+                                            <input type="number" class="form-control form-control-premium" @bind="settings.StandardShiftHours" step="0.5" />
+                                            <span class="input-group-text bg-light border-0 small">Hrs</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label-primary">Late Grace</label>
+                                        <div class="input-group">
+                                            <input type="number" class="form-control form-control-premium" @bind="settings.LateThresholdMinutes" />
+                                            <span class="input-group-text bg-light border-0 small">Min</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="settings-group">
+                                <label class="form-label-primary">Auto Clock-Out Threshold</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control form-control-premium" @bind="settings.AutoClockOutThreshold" step="0.5" />
+                                    <span class="input-group-text bg-light border-0 small">Max Hours</span>
+                                </div>
+                                <p class="x-small text-muted mt-2">Force system logout if shift exceeds this limit.</p>
+                            </div>
+
+                            <div class="settings-group">
+                                <label class="form-label-primary">Intelligence Timezone</label>
+                                <select class="form-select form-control-premium" @bind="settings.DefaultTimeZone">
+                                    <option value="South Africa Standard Time">South Africa (GMT+2)</option>
+                                    <option value="UTC">Universal Coordinated Time (UTC)</option>
+                                    <option value="E. Africa Standard Time">East Africa (GMT+3)</option>
+                                    <option value="W. Central Africa Standard Time">West Central Africa (GMT+1)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Security Protocol -->
+                    <div class="col-md-6">
+                        <div class="glass-panel p-4 h-100 bg-white">
+                            <div class="d-flex align-items-center gap-3 mb-4">
+                                <div class="section-icon bg-danger bg-opacity-10 text-danger">
+                                    <i class="bi bi-shield-lock"></i>
+                                </div>
+                                <h5 class="fw-bold mb-0">Security Protocol</h5>
+                            </div>
+
+                            <div class="settings-group">
+                                <label class="form-label-primary">Biometric Confidence Threshold</label>
+                                <div class="d-flex align-items-center gap-3">
+                                    <input type="range" class="form-range flex-grow-1" min="0.4" max="0.9" step="0.05" @bind="settings.FaceRecognitionConfidenceThreshold" @bind:event="oninput" />
+                                    <span class="badge bg-danger rounded-pill px-3 py-2 fw-bold">@((settings.FaceRecognitionConfidenceThreshold ?? 0.6).ToString("P0"))</span>
+                                </div>
+                                <div class="d-flex justify-content-between x-small text-muted mt-1">
+                                    <span>Lenient</span>
+                                    <span>Recommended: 60%</span>
+                                    <span>Strict</span>
+                                </div>
+                            </div>
+
+                            <div class="settings-group">
+                                <div class="form-check form-switch d-flex justify-content-between align-items-center p-0 mb-3">
+                                    <div>
+                                        <label class="fw-bold text-dark d-block small">Geofence Enforcement</label>
+                                        <span class="x-small text-muted">Mandatory location verification</span>
+                                    </div>
+                                    <input class="form-check-input" type="checkbox" @bind="settings.GlobalGeofenceEnforcement">
+                                </div>
+                                <div class="form-check form-switch d-flex justify-content-between align-items-center p-0">
+                                    <div>
+                                        <label class="fw-bold text-dark d-block small">Biometric Device Lock</label>
+                                        <span class="x-small text-muted">Single hardware association</span>
+                                    </div>
+                                    <input class="form-check-input" type="checkbox" @bind="settings.GlobalDeviceLockEnforcement">
+                                </div>
+                            </div>
+
+                            <div class="alert alert-info border-0 rounded-4 p-3 bg-primary bg-opacity-5 mb-0">
+                                <div class="d-flex gap-3">
+                                    <i class="bi bi-info-circle-fill text-primary fs-5"></i>
+                                    <p class="x-small text-muted mb-0">Device Lock prevents account sharing by binding the worker's identity to their primary device.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Institutional Policy -->
+                    <div class="col-12">
+                        <div class="glass-panel p-4 bg-white">
+                            <div class="d-flex align-items-center gap-3 mb-4">
+                                <div class="section-icon bg-success bg-opacity-10 text-success">
+                                    <i class="bi bi-journal-check"></i>
+                                </div>
+                                <h5 class="fw-bold mb-0">Institutional Policy (Annual Days)</h5>
+                            </div>
+
+                            <div class="row g-3">
+                                <div class="col-6 col-md-3">
+                                    <label class="form-label-primary">Annual Leave</label>
+                                    <input type="number" class="form-control form-control-premium" @bind="settings.DefaultAnnualLeaveDays" />
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <label class="form-label-primary">Sick Leave</label>
+                                    <input type="number" class="form-control form-control-premium" @bind="settings.DefaultSickLeaveDays" />
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <label class="form-label-primary">Family Resp</label>
+                                    <input type="number" class="form-control form-control-premium" @bind="settings.DefaultFamilyLeaveDays" />
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <label class="form-label-primary">Parental</label>
+                                    <input type="number" class="form-control form-control-premium" @bind="settings.DefaultParentalLeaveDays" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Registry Hub (Holidays) -->
+            <div class="col-12 col-xl-4">
+                <div class="glass-panel p-4 h-100 bg-white">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="section-icon bg-warning bg-opacity-10 text-warning">
+                                <i class="bi bi-calendar-event"></i>
+                            </div>
+                            <h5 class="fw-bold mb-0">Registry Hub</h5>
+                        </div>
+                        <button class="btn btn-sm btn-light rounded-pill px-3 fw-bold" @onclick="PrepareAddHoliday">
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                    </div>
+
+                    <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                        <table class="table holiday-table align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Protocol Date</th>
+                                    <th>Event Name</th>
+                                    <th class="text-end"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (settings.PublicHolidays != null && settings.PublicHolidays.Any())
+                                {
+                                    @foreach (var holiday in settings.PublicHolidays.OrderBy(h => h.Date))
+                                    {
+                                        <tr @key="holiday.Date.Ticks">
+                                            <td class="small fw-bold">@holiday.Date.ToString("dd MMM yyyy")</td>
+                                            <td class="small">@holiday.Name</td>
+                                            <td class="text-end">
+                                                <button class="btn btn-icon btn-light text-danger rounded-circle" @onclick="() => RemoveHoliday(holiday)">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr>
+                                        <td colspan="3" class="text-center py-5 opacity-50">
+                                            <i class="bi bi-calendar-x fs-2 d-block mb-2"></i>
+                                            <span class="small">No custom protocol dates</span>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Toast Feedback -->
+<div class="toast-container-custom">
+    <div class="toast-custom @(showToast ? "show" : "")">
+        <i class="bi bi-check-circle-fill text-success fs-4"></i>
+        <div class="fw-bold">Protocol Synchronized Successfully</div>
+    </div>
+</div>
+
+<!-- Modal: Add Holiday -->
+@if (showAddModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); backdrop-filter: blur(8px); z-index: 1060;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 rounded-4 shadow-lg overflow-hidden">
+                <div class="modal-header border-0 bg-primary text-white p-4">
+                    <h5 class="modal-title fw-bold">Add Protocol Event</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label-primary">Event Designation</label>
+                        <input type="text" class="form-control form-control-premium" @bind="newHolidayName" placeholder="e.g. Workers' Day" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label-primary">Designated Date</label>
+                        <input type="date" class="form-control form-control-premium" @bind="newHolidayDate" />
+                    </div>
+                </div>
+                <div class="modal-footer border-0 p-4 bg-light">
+                    <button type="button" class="btn btn-white rounded-pill px-4 fw-bold" @onclick="CloseModal">Abort</button>
+                    <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm" @onclick="AddHoliday">Establish Event</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private SystemSettings? settings;
+    private bool isSaving = false;
+    private bool showAddModal = false;
+    private bool showToast = false;
+    
+    private string newHolidayName = "";
+    private DateTime newHolidayDate = DateTime.Today;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            if (!Auth.IsAuthenticated || !Auth.IsAdmin)
+            {
+                Navigation.NavigateTo("/login");
+                return;
+            }
+            await LoadSettings();
+        }
+    }
+
+    private async Task LoadSettings()
+    {
+        settings = await SettingsService.GetSettingsAsync();
+        // Ensure defaults if missing
+        settings.FaceRecognitionConfidenceThreshold ??= 0.6;
+        settings.DefaultTimeZone ??= "South Africa Standard Time";
+        settings.StandardShiftHours ??= 8.0;
+        settings.AutoClockOutThreshold ??= 10.0;
+        
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SaveSettings()
+    {
+        if (settings == null) return;
+
+        isSaving = true;
+        try
+        {
+            await SettingsService.UpdateSettingsAsync(settings);
+            await TriggerToast();
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", "Config Save Error:", ex.Message);
+        }
+        finally
+        {
+            isSaving = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task TriggerToast()
+    {
+        showToast = true;
+        StateHasChanged();
+        await Task.Delay(3000);
+        showToast = false;
+        StateHasChanged();
+    }
+
+    private void PrepareAddHoliday()
+    {
+        newHolidayName = "";
+        newHolidayDate = DateTime.Today;
+        showAddModal = true;
+    }
+
+    private void CloseModal()
+    {
+        showAddModal = false;
+    }
+
+    private async Task AddHoliday()
+    {
+        if (string.IsNullOrWhiteSpace(newHolidayName)) return;
+
+        if (settings != null)
+        {
+            settings.PublicHolidays ??= new List<PublicHoliday>();
+            if (!settings.PublicHolidays.Any(h => h.Date.Date == newHolidayDate.Date))
+            {
+                settings.PublicHolidays.Add(new PublicHoliday
+                {
+                    Name = newHolidayName,
+                    Date = newHolidayDate
+                });
+                await SettingsService.UpdateSettingsAsync(settings);
+                await TriggerToast();
+            }
+            showAddModal = false;
+        }
+    }
+
+    private async Task RemoveHoliday(PublicHoliday holiday)
+    {
+        if (settings != null && settings.PublicHolidays != null)
+        {
+            settings.PublicHolidays.Remove(holiday);
+            await SettingsService.UpdateSettingsAsync(settings);
+            await TriggerToast();
+        }
+    }
+}

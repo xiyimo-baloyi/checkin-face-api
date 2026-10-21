@@ -1,0 +1,407 @@
+@page "/worker/request-remote"
+@using System.ComponentModel.DataAnnotations
+@using Africanideasfaceapi.Models
+@using Africanideasfaceapi.Services
+@inject RemoteWorkService RemoteWorkService
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@inject ILogger<RequestRemote> Logger
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+<PageTitle>Request Remote Work - African Ideas</PageTitle>
+
+<div class="remote-work-page animate-fade-in pb-4 pb-md-5">
+    <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between mb-4 mb-md-5 border-bottom pb-3 gap-3">
+        <div>
+            <nav aria-label="Breadcrumb" class="mb-2">
+                <ol class="breadcrumb mb-0 small">
+                    <li class="breadcrumb-item"><a href="/" class="text-decoration-none">Home</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Remote work</li>
+                </ol>
+            </nav>
+            <h1 class="fw-bold mb-1 text-dark h2" style="color: #0f172a !important; font-size: clamp(1.5rem, 4vw, 2rem);">
+                Request Remote Work
+            </h1>
+            <p class="text-muted mb-0 opacity-75" style="font-size: clamp(0.85rem, 2vw, 1rem);">
+                Ask to work from home on a specific day. Your manager will review pending requests.
+            </p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="/" class="btn btn-outline-secondary rounded-pill px-3 px-md-4">
+                <i class="bi bi-house-door me-1" aria-hidden="true"></i> Dashboard
+            </a>
+        </div>
+    </div>
+
+    @if (isLoadingPage)
+    {
+        <div class="d-flex justify-content-center align-items-center py-5" style="min-height: 35vh;">
+            <div class="text-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading your remote work requests…</span>
+                </div>
+                <p class="text-muted small mt-3 mb-0">Loading your requests…</p>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="row g-3 g-md-4 mb-4 mb-md-5" aria-label="Request summary">
+            <div class="col-4">
+                <div class="stat-card p-3 p-md-4 h-100 border-start border-4 border-warning">
+                    <span class="text-uppercase fw-bold text-muted d-block mb-1" style="font-size: 0.65rem; letter-spacing: 0.05em;">Pending</span>
+                    <span class="fw-bold text-dark fs-4 mb-0">@PendingCount</span>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="stat-card p-3 p-md-4 h-100 border-start border-4 border-success">
+                    <span class="text-uppercase fw-bold text-muted d-block mb-1" style="font-size: 0.65rem; letter-spacing: 0.05em;">Approved</span>
+                    <span class="fw-bold text-dark fs-4 mb-0">@ApprovedCount</span>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="stat-card p-3 p-md-4 h-100 border-start border-4 border-danger">
+                    <span class="text-uppercase fw-bold text-muted d-block mb-1" style="font-size: 0.65rem; letter-spacing: 0.05em;">Declined</span>
+                    <span class="fw-bold text-dark fs-4 mb-0">@RejectedCount</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-lg-none mobile-tabs mb-3" role="tablist" aria-label="Remote work sections">
+            <div class="btn-group w-100 rounded-4 overflow-hidden border shadow-sm">
+                <button type="button" class="btn @(mobilePanel == "form" ? "btn-primary" : "btn-light") flex-fill"
+                        role="tab" aria-selected="@(mobilePanel == "form")" aria-controls="remote-form-panel"
+                        @onclick='() => mobilePanel = "form"'>
+                    <i class="bi bi-pencil-square me-1" aria-hidden="true"></i> New request
+                </button>
+                <button type="button" class="btn @(mobilePanel == "history" ? "btn-primary" : "btn-light") flex-fill"
+                        role="tab" aria-selected="@(mobilePanel == "history")" aria-controls="remote-history-panel"
+                        @onclick='() => mobilePanel = "history"'>
+                    <i class="bi bi-clock-history me-1" aria-hidden="true"></i> History (@(requests?.Count ?? 0))
+                </button>
+            </div>
+        </div>
+
+        <div aria-live="polite" aria-atomic="true" class="visually-hidden">@liveStatusMessage</div>
+
+        <div class="row g-3 g-md-4">
+            <div class="col-12 col-lg-4 order-2 order-lg-1 @(ShowFormPanel ? "" : "d-none d-lg-block")" id="remote-form-panel" role="tabpanel">
+                <div class="glass-panel p-0 rounded-4 shadow-lg border-0 overflow-hidden h-100" style="background: white;">
+                    <div class="py-4 px-4" style="background: #1e293b;">
+                        <h2 class="fw-bold mb-1 text-white h5">
+                            <i class="bi bi-house-heart me-2" aria-hidden="true"></i> New request
+                        </h2>
+                        <p class="text-white-50 small mb-0">Pick a date and explain why you need to work remotely.</p>
+                    </div>
+
+                    <div class="p-4">
+                        <div class="hint-box p-3 mb-4 small">
+                            <i class="bi bi-info-circle me-2" aria-hidden="true"></i>
+                            Submit at least one business day ahead when possible. You will be notified once an admin reviews your request.
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(successMessage))
+                        {
+                            <div class="alert alert-success border-0 bg-success bg-opacity-10 text-success rounded-4 px-3 py-2 mb-3 d-flex align-items-start gap-2" role="status">
+                                <i class="bi bi-check-circle-fill fs-5 flex-shrink-0" aria-hidden="true"></i>
+                                <div class="flex-grow-1">@successMessage</div>
+                                <button type="button" class="btn-close" aria-label="Dismiss success message" @onclick="ClearSuccess"></button>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(errorMessage))
+                        {
+                            <div class="alert alert-danger border-0 bg-danger bg-opacity-10 text-danger rounded-4 px-3 py-2 mb-3 d-flex align-items-start gap-2" role="alert">
+                                <i class="bi bi-exclamation-triangle-fill fs-5 flex-shrink-0" aria-hidden="true"></i>
+                                <div class="flex-grow-1">@errorMessage</div>
+                                <button type="button" class="btn-close" aria-label="Dismiss error message" @onclick="ClearError"></button>
+                            </div>
+                        }
+
+                        <EditForm Model="formModel" OnValidSubmit="SubmitRequestAsync">
+                            <DataAnnotationsValidator />
+
+                            <div class="mb-3">
+                                <label class="form-label-primary" for="remote-date">Work remotely on</label>
+                                <InputDate id="remote-date" @bind-Value="formModel.Date" class="form-control form-control-premium" min="@MinSelectableDate" />
+                                <ValidationMessage For="@(() => formModel.Date)" class="text-danger small mt-1 d-block" />
+                                <div class="d-flex flex-wrap gap-2 mt-2">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill quick-date-btn" @onclick="() => SetQuickDate(1)">Tomorrow</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill quick-date-btn" @onclick="SetNextMonday">Next Monday</button>
+                                </div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="form-label-primary" for="remote-reason">Reason</label>
+                                <InputTextArea id="remote-reason" @bind-Value="formModel.Reason" class="form-control form-control-premium" rows="4"
+                                               placeholder="What will you work on? Mention meetings, focus time, or location constraints." maxlength="500" />
+                                <ValidationMessage For="@(() => formModel.Reason)" class="text-danger small mt-1 d-block" />
+                                <div class="char-count mt-1 @(formModel.Reason.Trim().Length < MinReasonLength ? "is-low" : "")" aria-hidden="true">
+                                    @formModel.Reason.Length / 500 characters @(formModel.Reason.Trim().Length < MinReasonLength ? $"(min. {MinReasonLength})" : "")
+                                </div>
+                            </div>
+
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary btn-lg rounded-pill shadow-lg border-0 fw-bold transition-all hover-translate-y py-3" style="background: #2563eb;" disabled="@isSubmitting">
+                                    @if (isSubmitting)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                        <span>Submitting…</span>
+                                    }
+                                    else
+                                    {
+                                        <span><i class="bi bi-send-fill me-2" aria-hidden="true"></i> Submit request</span>
+                                    }
+                                </button>
+                            </div>
+                        </EditForm>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-lg-8 order-1 order-lg-2 @(ShowHistoryPanel ? "" : "d-none d-lg-block")" id="remote-history-panel" role="tabpanel">
+                <div class="glass-panel p-0 rounded-4 shadow-sm overflow-hidden h-100" style="background: white;">
+                    <div class="p-4 border-bottom d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
+                        <div>
+                            <h2 class="fw-bold mb-0 text-dark h5" style="font-size: 1.1rem;">My requests</h2>
+                            <p class="text-muted small mb-0">Newest dates first</p>
+                        </div>
+                        <span class="badge rounded-pill px-3 py-2 border text-dark" style="background: #f1f5f9;">@(requests?.Count ?? 0) total</span>
+                    </div>
+
+                    @if (loadError != null)
+                    {
+                        <div class="p-4">
+                            <div class="alert alert-warning border-0 rounded-4 mb-0" role="alert">
+                                <i class="bi bi-cloud-slash me-2" aria-hidden="true"></i>@loadError
+                                <button type="button" class="btn btn-sm btn-outline-dark rounded-pill ms-2" @onclick="LoadHistoryAsync">Retry</button>
+                            </div>
+                        </div>
+                    }
+                    else if (requests == null)
+                    {
+                        <div class="p-5 text-center">
+                            <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading…</span></div>
+                        </div>
+                    }
+                    else if (requests.Count == 0)
+                    {
+                        <div class="p-5 p-md-5 text-center">
+                            <div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center mb-3" style="width: 4rem; height: 4rem;">
+                                <i class="bi bi-laptop fs-3 text-primary" aria-hidden="true"></i>
+                            </div>
+                            <h3 class="h6 fw-bold text-dark">No requests yet</h3>
+                            <p class="text-muted small mb-4 mx-auto" style="max-width: 22rem;">
+                                When you submit a remote day, it will appear here with pending, approved, or declined status.
+                            </p>
+                            <button type="button" class="btn btn-primary rounded-pill d-lg-none" @onclick='() => mobilePanel = "form"'>
+                                Create your first request
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="overflow-auto" style="max-height: min(560px, 70vh);">
+                            @foreach (var req in requests)
+                            {
+                                <article class="request-row p-4" @key="req.Id">
+                                    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start gap-2 mb-2">
+                                        <div class="d-flex align-items-start gap-3">
+                                            <span class="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0 @GetStatusIconBg(req.Status)" style="width: 2.5rem; height: 2.5rem;" aria-hidden="true">
+                                                <i class="bi @GetStatusIcon(req.Status)"></i>
+                                            </span>
+                                            <div>
+                                                <time class="fw-bold text-dark d-block" datetime="@req.Date.ToString("yyyy-MM-dd")">
+                                                    @req.Date.ToString("dddd, dd MMM yyyy")
+                                                </time>
+                                                <span class="text-muted small">Submitted @req.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</span>
+                                            </div>
+                                        </div>
+                                        <span class="badge rounded-pill px-3 py-2 @GetStatusBadgeClass(req.Status)">
+                                            @req.Status
+                                        </span>
+                                    </div>
+
+                                    <p class="text-dark mb-2 mb-sm-3 small lh-base" style="white-space: pre-wrap;">@req.Reason</p>
+
+                                    @if (!string.IsNullOrWhiteSpace(req.AdminComment))
+                                    {
+                                        <div class="p-3 rounded-3 small" style="background: #f8fafc; border-left: 4px solid #2563eb;">
+                                            <span class="fw-bold text-uppercase d-block mb-1" style="font-size: 0.65rem; letter-spacing: 0.05em; color: #2563eb;">Manager note</span>
+                                            @req.AdminComment
+                                        </div>
+                                    }
+                                </article>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private const int MinReasonLength = 10;
+
+    private List<RemoteWorkRequest>? requests;
+    private RemoteWorkFormModel formModel = new();
+    private bool isSubmitting;
+    private bool isLoadingPage = true;
+    private string? successMessage;
+    private string? errorMessage;
+    private string? loadError;
+    private string? liveStatusMessage;
+    private string mobilePanel = "form";
+
+    private DateTime MinSelectableDate => DateTime.Today;
+
+    private int PendingCount => requests?.Count(r => r.Status == "Pending") ?? 0;
+    private int ApprovedCount => requests?.Count(r => r.Status == "Approved") ?? 0;
+    private int RejectedCount => requests?.Count(r => r.Status == "Rejected") ?? 0;
+
+    private bool ShowFormPanel => mobilePanel == "form";
+    private bool ShowHistoryPanel => mobilePanel == "history";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthService.CurrentUser == null)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        formModel.Date = DateTime.Today.AddDays(1);
+        await LoadHistoryAsync();
+        isLoadingPage = false;
+    }
+
+    private async Task LoadHistoryAsync()
+    {
+        loadError = null;
+        errorMessage = null;
+
+        try
+        {
+            var userId = AuthService.CurrentUser?.Id;
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                loadError = "Could not identify your account. Please sign in again.";
+                requests = new List<RemoteWorkRequest>();
+                return;
+            }
+
+            requests = await RemoteWorkService.GetUserRequestsAsync(userId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load remote work requests");
+            loadError = "We could not load your request history. Check your connection and try again.";
+            requests = new List<RemoteWorkRequest>();
+        }
+    }
+
+    private async Task SubmitRequestAsync()
+    {
+        errorMessage = null;
+        successMessage = null;
+
+        if (formModel.Date.Date < DateTime.Today)
+        {
+            errorMessage = "Please choose today or a future date.";
+            return;
+        }
+
+        if (requests?.Any(r => r.Date.Date == formModel.Date.Date && r.Status == "Pending") == true)
+        {
+            errorMessage = "You already have a pending request for this date.";
+            return;
+        }
+
+        if (requests?.Any(r => r.Date.Date == formModel.Date.Date && r.Status == "Approved") == true)
+        {
+            errorMessage = "This date is already approved for remote work.";
+            return;
+        }
+
+        isSubmitting = true;
+        try
+        {
+            var user = AuthService.CurrentUser!;
+            var req = new RemoteWorkRequest
+            {
+                UserId = user.Id,
+                UserName = user.Name,
+                Date = formModel.Date.Date,
+                Reason = formModel.Reason.Trim()
+            };
+
+            await RemoteWorkService.SubmitRequestAsync(req);
+            successMessage = $"Request for {formModel.Date:dddd, dd MMM} was submitted. You will see updates in My requests.";
+            liveStatusMessage = successMessage;
+            formModel = new RemoteWorkFormModel { Date = DateTime.Today.AddDays(1) };
+            mobilePanel = "history";
+            await LoadHistoryAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to submit remote work request");
+            errorMessage = "Something went wrong while submitting. Please try again.";
+            liveStatusMessage = errorMessage;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private void SetQuickDate(int daysFromToday) => formModel.Date = DateTime.Today.AddDays(daysFromToday);
+
+    private void SetNextMonday()
+    {
+        var date = DateTime.Today.AddDays(1);
+        while (date.DayOfWeek != DayOfWeek.Monday)
+        {
+            date = date.AddDays(1);
+        }
+        formModel.Date = date;
+    }
+
+    private void ClearSuccess() => successMessage = null;
+    private void ClearError() => errorMessage = null;
+
+    private static string GetStatusBadgeClass(string status) => status switch
+    {
+        "Pending" => "text-bg-warning text-dark",
+        "Approved" => "text-bg-success",
+        "Rejected" => "text-bg-danger",
+        _ => "text-bg-secondary"
+    };
+
+    private static string GetStatusIcon(string status) => status switch
+    {
+        "Pending" => "bi-hourglass-split",
+        "Approved" => "bi-check-lg",
+        "Rejected" => "bi-x-lg",
+        _ => "bi-question-lg"
+    };
+
+    private static string GetStatusIconBg(string status) => status switch
+    {
+        "Pending" => "bg-warning bg-opacity-25 text-dark",
+        "Approved" => "bg-success bg-opacity-25 text-success",
+        "Rejected" => "bg-danger bg-opacity-25 text-danger",
+        _ => "bg-light text-muted"
+    };
+
+    private sealed class RemoteWorkFormModel
+    {
+        [Required(ErrorMessage = "Please choose a date.")]
+        public DateTime Date { get; set; } = DateTime.Today.AddDays(1);
+
+        [Required(ErrorMessage = "Please tell us why you need to work remotely.")]
+        [MinLength(MinReasonLength, ErrorMessage = "Please write at least 10 characters so your manager has context.")]
+        [MaxLength(500, ErrorMessage = "Reason cannot exceed 500 characters.")]
+        public string Reason { get; set; } = string.Empty;
+    }
+}

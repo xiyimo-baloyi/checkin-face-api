@@ -1,0 +1,339 @@
+@page "/admin/map"
+@using Africanideasfaceapi.Services
+@using Africanideasfaceapi.Models
+@inject BranchService BranchService
+@inject AttendanceService AttendanceService
+@inject UserService UserService
+@inject AuthService Auth
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@using Microsoft.AspNetCore.SignalR.Client
+@implements IAsyncDisposable
+
+<PageTitle>Live Attendance Intelligence - Map View</PageTitle>
+
+<div class="map-container-wrapper animate-fade-in">
+    @* Sidebar Overlay *@
+    <div class="map-sidebar glass-panel shadow-lg p-4">
+        <div class="d-flex align-items-center gap-3 mb-4">
+            <button class="btn btn-white shadow-sm rounded-circle p-2 transition-all hover-translate-y" @onclick='() => Navigation.NavigateTo("/admin/deep-analytics")'>
+                <i class="bi bi-arrow-left text-primary"></i>
+            </button>
+            <h4 class="fw-bold mb-0 text-primary">Map Intelligence</h4>
+        </div>
+
+        <div class="mb-4">
+            <label class="small text-muted text-uppercase fw-bold mb-2">Display Mode</label>
+            <div class="row g-2">
+                <div class="col-6">
+                    <button class="btn @(showBranches ? "btn-primary" : "btn-outline-primary") w-100 rounded-pill small fw-bold py-2" @onclick="ToggleBranches">
+                        <i class="bi bi-geo-fill me-1"></i> Branches
+                    </button>
+                </div>
+                <div class="col-6">
+                    <button class="btn @(showAttendance ? "btn-primary" : "btn-outline-primary") w-100 rounded-pill small fw-bold py-2" @onclick="ToggleAttendance">
+                        <i class="bi bi-person-badge-fill me-1"></i> Attendance
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="text-center py-5">
+                <div class="spinner-grow text-primary mb-3" role="status"></div>
+                <p class="text-muted small">Synthesizing location data...</p>
+            </div>
+        }
+        else
+        {
+            <div class="stats-grid mb-4">
+                <div class="bg-light bg-opacity-50 p-3 rounded-4 mb-3">
+                    <small class="text-muted text-uppercase fw-bold x-small d-block mb-1">Geofence Compliance</small>
+                    <div class="d-flex justify-content-between align-items-end">
+                        <h4 class="fw-bold mb-0 text-dark">@complianceRate.ToString("F1")%</h4>
+                        <span class="badge @(complianceRate > 90 ? "bg-success" : "bg-warning") rounded-pill">@(complianceRate > 90 ? "Healthy" : "Attention")</span>
+                    </div>
+                    <div class="progress mt-2" style="height: 6px;">
+                        <div class="progress-bar bg-success" role="progressbar" style="width: @complianceRate%"></div>
+                        <div class="progress-bar bg-danger" role="progressbar" style="width: @(100 - complianceRate)%"></div>
+                    </div>
+                </div>
+
+                <div class="row g-2">
+                    <div class="col-6">
+                        <div class="bg-success bg-opacity-10 p-2 rounded-3 text-center">
+                            <h5 class="fw-bold text-success mb-0">@inAreaCount</h5>
+                            <small class="text-muted x-small">In Area</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="bg-danger bg-opacity-10 p-2 rounded-3 text-center">
+                            <h5 class="fw-bold text-danger mb-0">@outOfAreaCount</h5>
+                            <small class="text-muted x-small">Violations</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h6 class="fw-bold text-dark mb-3">Recent Activity Feed</h6>
+            <div class="activity-feed overflow-auto pe-2" style="max-height: 400px;">
+                @if (attendanceLogs != null && attendanceLogs.Any())
+                {
+                    @foreach (var log in attendanceLogs.Take(10))
+                    {
+                        <div class="activity-item glass-panel p-2 mb-2 border-0 shadow-sm rounded-3 transition-all hover-translate-y pointer" 
+                             @onclick="() => CenterOnAttendance(log)">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="fw-bold text-dark small text-truncate" style="max-width: 120px;">@ResolveName(log.EmployeeId)</span>
+                                <span class="badge @(log.IsOutOfArea ? "bg-danger" : "bg-success") bg-opacity-10 @(log.IsOutOfArea ? "text-danger" : "text-success") x-small rounded-pill">
+                                    @(log.IsOutOfArea ? "Outside" : "Inside")
+                                </span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mt-1">
+                                <small class="text-muted x-small">@log.ClockInTime?.ToString("HH:mm")</small>
+                                @if (log.Latitude.HasValue && log.Longitude.HasValue)
+                                {
+                                    <a href="https://www.google.com/maps?q=@(log.Latitude),@(log.Longitude)" target="_blank" rel="noopener" class="text-decoration-none small">
+                                        <i class="bi bi-geo-alt-fill text-danger"></i>
+                                    </a>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-geo-alt text-muted x-small" title="No GPS"></i>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <p class="text-muted small text-center py-4">No recent attendance recorded.</p>
+                }
+            </div>
+        }
+        
+        <div class="mt-auto pt-4 text-center">
+            <span class="badge bg-primary bg-opacity-10 text-primary rounded-pill px-3 py-2 small fw-bold">
+                <i class="bi bi-shield-check me-1"></i> Live Audit Secure
+            </span>
+        </div>
+    </div>
+
+    @* Map Viewport *@
+    <div id="attendance-map" class="map-viewport"></div>
+</div>
+
+<style>
+    .map-container-wrapper {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 100;
+        background: #f8f9fa;
+        overflow: hidden;
+    }
+
+    .map-viewport {
+        width: 100%;
+        height: 100%;
+    }
+
+    .map-sidebar {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        width: 350px;
+        height: calc(100% - 40px);
+        z-index: 1000;
+        display: flex;
+        flex-direction: column;
+        border-radius: 2rem !important;
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        background: rgba(255, 255, 255, 0.85);
+        border: 1px solid rgba(255, 255, 255, 0.5);
+    }
+
+    .glass-panel {
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+    }
+
+    .activity-feed::-webkit-scrollbar {
+        width: 4px;
+    }
+    .activity-feed::-webkit-scrollbar-thumb {
+        background: rgba(0,0,0,0.1);
+        border-radius: 10px;
+    }
+
+    .x-small { font-size: 0.7rem; }
+    .pointer { cursor: pointer; }
+
+    @@media (max-width: 768px) {
+        .map-sidebar {
+            width: calc(100% - 40px);
+            height: auto;
+            max-height: 40%;
+            bottom: 20px;
+            top: auto;
+        }
+    }
+</style>
+
+@code {
+    private List<Branch>? branches;
+    private List<Attendance>? attendanceLogs;
+    private Dictionary<string, string> employeeNames = new();
+    private bool isLoading = true;
+    private bool showBranches = true;
+    private bool showAttendance = true;
+    private double complianceRate = 0;
+    private int inAreaCount = 0;
+    private int outOfAreaCount = 0;
+    private HubConnection? hubConnection;
+
+    private string ResolveName(string? employeeId)
+    {
+        if (string.IsNullOrEmpty(employeeId)) return "Unknown";
+        return employeeNames.TryGetValue(employeeId, out var name) ? name : employeeId;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            if (!Auth.IsAuthenticated || !Auth.IsAdmin)
+            {
+                Navigation.NavigateTo("/login");
+                return;
+            }
+
+            isLoading = true;
+            StateHasChanged();
+
+            try
+            {
+                branches = await BranchService.GetAllBranchesAsync();
+                
+                // SignalR Setup
+                hubConnection = new HubConnectionBuilder()
+                    .WithUrl(Navigation.ToAbsoluteUri("/analyticshub"))
+                    .WithAutomaticReconnect()
+                    .Build();
+
+                hubConnection.On<string, string>("AnalyticsUpdated", async (action, message) =>
+                {
+                    if (action == "ClockIn" || action == "ClockOut")
+                    {
+                        await LoadLatestAttendance();
+                        await UpdateMapData();
+                        StateHasChanged();
+                    }
+                });
+
+                await hubConnection.StartAsync();
+
+                await LoadLatestAttendance();
+
+                // Initial map load (Default center: First branch or 0,0)
+                var centerLat = branches?.FirstOrDefault()?.Latitude ?? 0;
+                var centerLon = branches?.FirstOrDefault()?.Longitude ?? 0;
+
+                await JSRuntime.InvokeVoidAsync("attendanceMap.initializeMap", "attendance-map", centerLat, centerLon, 13);
+                await UpdateMapData();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error initializing map: {ex.Message}");
+            }
+            finally
+            {
+                isLoading = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task LoadLatestAttendance()
+    {
+        attendanceLogs = await AttendanceService.GetRecentAttendanceAsync(100);
+
+        if (attendanceLogs != null && attendanceLogs.Any())
+        {
+            inAreaCount = attendanceLogs.Count(a => !a.IsOutOfArea);
+            outOfAreaCount = attendanceLogs.Count(a => a.IsOutOfArea);
+            complianceRate = (double)inAreaCount / attendanceLogs.Count * 100;
+
+            try
+            {
+                var users = await UserService.GetAllUsersAsync();
+                employeeNames = users
+                    .Where(u => !string.IsNullOrEmpty(u.Id))
+                    .ToDictionary(u => u.Id, u => string.IsNullOrEmpty(u.Surname) ? u.Name : $"{u.Name} {u.Surname}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Map: name lookup failed: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task UpdateMapData()
+    {
+        if (showBranches && branches != null)
+        {
+            await JSRuntime.InvokeVoidAsync("attendanceMap.setBranches", "attendance-map", branches);
+        }
+        
+        if (showAttendance && attendanceLogs != null)
+        {
+            var markerData = attendanceLogs.Select(a => new
+            {
+                a.EmployeeId,
+                EmployeeName = ResolveName(a.EmployeeId),
+                a.Latitude,
+                a.Longitude,
+                a.IsOutOfArea,
+                a.ClockInTime,
+                a.ClockOutTime,
+                a.Status
+            });
+            await JSRuntime.InvokeVoidAsync("attendanceMap.setAttendanceMarkers", "attendance-map", markerData);
+        }
+    }
+
+    private void ToggleBranches()
+    {
+        showBranches = !showBranches;
+        // In a real app we'd trigger a map refresh here
+    }
+
+    private void ToggleAttendance()
+    {
+        showAttendance = !showAttendance;
+        // In a real app we'd trigger a map refresh here
+    }
+
+    private async Task CenterOnAttendance(Attendance log)
+    {
+        if (log.Latitude.HasValue && log.Longitude.HasValue)
+        {
+            // We use the initializeMap with a higher zoom to "center"
+            await JSRuntime.InvokeVoidAsync("attendanceMap.initializeMap", "attendance-map", log.Latitude.Value, log.Longitude.Value, 18);
+            await UpdateMapData();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}

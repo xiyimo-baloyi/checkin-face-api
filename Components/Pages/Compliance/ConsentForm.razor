@@ -1,0 +1,167 @@
+@page "/compliance/consent"
+@using Africanideasfaceapi.Models
+@using Africanideasfaceapi.Services
+@inject AuthService AuthService
+@inject UserService UserService
+@inject AuditService AuditService
+@inject NavigationManager Navigation
+
+<PageTitle>POPIA Consent Form - Attendance System</PageTitle>
+
+<div class="privacy-hub-container">
+    <div class="privacy-card">
+        <div class="privacy-header">
+            <div class="mb-4">
+                <i class="bi bi-shield-lock-fill text-white opacity-25" style="font-size: 3.5rem;"></i>
+            </div>
+            <h2 class="fw-bold mb-2 text-white">Privacy Hub & Consent</h2>
+            <p class="text-white-50 mb-0">Secure biometric verification & data protection</p>
+        </div>
+
+        <div class="privacy-body">
+            <div class="mb-5">
+                <h5 class="section-title">
+                    <i class="bi bi-info-circle-fill"></i>
+                    Introduction
+                </h5>
+                <p class="text-muted leading-relaxed">
+                    Welcome, <span class="fw-bold text-dark">@AuthService.CurrentUser?.Name</span>. To ensure workplace accountability and individual security, our attendance system utilizes advanced facial recognition technology. We are committed to protecting your personal information in accordance with the <span class="badge bg-primary bg-opacity-10 text-primary">POPIA</span> act.
+                </p>
+            </div>
+
+            <div class="mb-5">
+                <h5 class="section-title">
+                    <i class="bi bi-bullseye"></i>
+                    Processing Purpose
+                </h5>
+                <div class="purpose-grid">
+                    <div class="purpose-item">
+                        <div class="purpose-icon"><i class="bi bi-person-check-fill"></i></div>
+                        <h6 class="fw-bold mb-2">Identity Verification</h6>
+                        <p class="small text-muted mb-0">Securely verify your identity during clock-in and clock-out events.</p>
+                    </div>
+                    <div class="purpose-item">
+                        <div class="purpose-icon"><i class="bi bi-calendar-check-fill"></i></div>
+                        <h6 class="fw-bold mb-2">Attendance Accuracy</h6>
+                        <p class="small text-muted mb-0">Maintain high-fidelity records for payroll and reporting.</p>
+                    </div>
+                    <div class="purpose-item">
+                        <div class="purpose-icon"><i class="bi bi-shield-fill-check"></i></div>
+                        <h6 class="fw-bold mb-2">Fraud Prevention</h6>
+                        <p class="small text-muted mb-0">Eliminate proxy clocking and ensure fair workplace security.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rights-list mb-5">
+                <h6 class="fw-bold text-dark mb-3">Your Digital Rights</h6>
+                <div class="right-item">
+                    <i class="bi bi-check2-circle text-primary"></i>
+                    <p class="small mb-0">Access your historical biometric and attendance logs anytime.</p>
+                </div>
+                <div class="right-item">
+                    <i class="bi bi-check2-circle text-primary"></i>
+                    <p class="small mb-0">Request immediate correction of inaccurate profile information.</p>
+                </div>
+                <div class="right-item">
+                    <i class="bi bi-check2-circle text-primary"></i>
+                    <p class="small mb-0">Withdraw consent at any time (usage of automated tracks will be disabled).</p>
+                </div>
+            </div>
+
+            <label class="consent-box @(isError ? "error" : "") mb-4" for="consentCheck">
+                <input class="d-none" type="checkbox" @bind="hasConsented" id="consentCheck">
+                <div class="custom-checkbox">
+                    @if (hasConsented) { <i class="bi bi-check-lg"></i> }
+                </div>
+                <div class="flex-grow-1">
+                    <span class="fw-bold text-dark d-block">I Consent to Biometric Processing</span>
+                    <span class="small text-muted">I have read and understood the digital privacy and security policies.</span>
+                </div>
+            </label>
+
+            @if (isError)
+            {
+                <div class="alert alert-danger border-0 rounded-4 p-3 mb-4 d-flex align-items-center gap-2">
+                    <i class="bi bi-exclamation-circle-fill"></i>
+                    <span class="small fw-bold">Please accept the consent terms to proceed to your profile.</span>
+                </div>
+            }
+
+            <div class="d-grid gap-3">
+                <button class="btn btn-premium w-100 py-3" @onclick="AcceptConsent" disabled="@isProcessing">
+                    @if (isProcessing)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2"></span>
+                        <span>Securing Identity...</span>
+                    }
+                    else
+                    {
+                        <span>Accept & Secure Profile</span>
+                    }
+                </button>
+                <button class="btn btn-link text-muted transition-all small" @onclick="DeclineConsent">I do not wish to use this system</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool hasConsented = false;
+    private bool isProcessing = false;
+    private bool isError = false;
+
+    protected override void OnInitialized()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        if (AuthService.CurrentUser?.HasConsented == true)
+        {
+            Navigation.NavigateTo("/profile");
+        }
+    }
+
+    private async Task AcceptConsent()
+    {
+        if (!hasConsented)
+        {
+            isError = true;
+            return;
+        }
+
+        isProcessing = true;
+        isError = false;
+
+        try
+        {
+            var user = AuthService.CurrentUser!;
+            user.HasConsented = true;
+            user.ConsentDate = DateTime.UtcNow;
+
+            await UserService.UpdateUserAsync(user);
+            AuditService.LogConsentAction(user.Id, user.Email, "AcceptedPOPIA");
+
+            Navigation.NavigateTo("/profile");
+        }
+        catch (Exception ex)
+        {
+            isError = true;
+            Console.WriteLine($"Error saving consent: {ex.Message}");
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private async Task DeclineConsent()
+    {
+        AuditService.LogConsentAction(AuthService.CurrentUser?.Id ?? "unknown", AuthService.CurrentUser?.Email ?? "unknown", "DeclinedPOPIA");
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/login");
+    }
+}

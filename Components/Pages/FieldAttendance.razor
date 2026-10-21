@@ -1,0 +1,592 @@
+@page "/field-attendance"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@using Africanideasfaceapi.Services
+@using Africanideasfaceapi.Models
+@using Africanideasfaceapi.Helpers
+@using Microsoft.JSInterop
+@inject FaceApiService FaceApiService
+@inject AttendanceService AttendanceService
+@inject UserService UserService
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject ILogger<FieldAttendance> Logger
+@implements IAsyncDisposable
+
+<PageTitle>Field Attendance - African Ideas</PageTitle>
+
+<div class="container-fluid min-vh-100 bg-black py-4 animate-fade-in">
+    <div class="row w-100 justify-content-center m-0">
+        <div class="col-12 col-md-10 col-lg-8 col-xl-6 p-0">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4 px-3">
+                <button class="btn btn-dark rounded-circle p-2" @onclick="GoBack">
+                    <i class="bi bi-arrow-left fs-4"></i>
+                </button>
+                <div class="text-center text-white">
+                    <h4 class="fw-bold mb-0">Field Verification</h4>
+                    <p class="small text-white text-opacity-50 mb-0">EPWP Scenario</p>
+                </div>
+                <div style="width: 40px;"></div> <!-- Spacer -->
+            </div>
+
+            @if (!isAdmin)
+            {
+                <div class="alert alert-danger mx-3 rounded-4 shadow-sm border-0">
+                    <h5 class="fw-bold"><i class="bi bi-shield-exclamation me-2"></i> Access Denied</h5>
+                    <p class="mb-0">You do not have the necessary permissions to access this page.</p>
+                </div>
+            }
+            else
+            {
+                <div class="position-relative overflow-hidden rounded-4 shadow-lg bg-dark" style="height: 70vh; min-height: 500px;">
+                    <!-- Camera Video -->
+                    <video @ref="videoElement" id="video-field-attendance" autoplay playsinline class="w-100 h-100" style="object-fit: cover;"></video>
+                    <canvas id="canvas-field-attendance" style="display: none;"></canvas>
+
+                    <!-- Face Frame Overlay -->
+                    <div class="face-frame-oval @(isFaceValid ? "active-valid" : "")"></div>
+
+                    <!-- Scanning Badges -->
+                    <div class="position-absolute top-0 start-0 w-100 p-3 p-md-4 d-flex justify-content-between align-items-start" style="pointer-events: none;">
+                        <div class="animate-fade-in">
+                            @if (isFaceValid)
+                            {
+                                <div class="bg-success bg-opacity-75 text-white px-3 py-2 rounded-pill shadow-sm small fw-bold">
+                                    <i class="bi bi-check-circle-fill me-1"></i> FACE READY
+                                </div>
+                            }
+                            else if (!string.IsNullOrEmpty(validationStatus))
+                            {
+                                <div class="bg-dark bg-opacity-50 text-white px-3 py-2 rounded-pill shadow-sm x-small">
+                                    @validationStatus
+                                </div>
+                            }
+                        </div>
+
+                        <div class="d-flex flex-column gap-1 align-items-end">
+                            <div class="biometric-badge @(validationResults.FaceDetected ? "active" : "")">
+                                <div class="indicator"></div> <span>Face</span>
+                            </div>
+                            <div class="biometric-badge @(validationResults.FaceCentered ? "active" : "")">
+                                <div class="indicator"></div> <span>Center</span>
+                            </div>
+                            <div class="biometric-badge @(validationResults.LightingGood ? "active" : "")">
+                                <div class="indicator"></div> <span>Light</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Status Display Overlay (Bottom) -->
+                    <div class="position-absolute bottom-0 start-0 w-100 p-4" style="background: linear-gradient(to top, rgba(0,0,0,0.8), transparent); pointer-events: none;">
+                        @if (!string.IsNullOrEmpty(ErrorMessage))
+                        {
+                            <div class="alert alert-danger border-0 shadow-lg p-3 rounded-4 mb-3 animate-shake" style="pointer-events: auto;">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+                                    <div class="small fw-bold">@ErrorMessage</div>
+                                    <button class="btn-close ms-auto" @onclick="() => ErrorMessage = null" style="pointer-events: auto;"></button>
+                                </div>
+                            </div>
+                        }
+
+                        @if (verifiedUser != null)
+                        {
+                            <div class="alert alert-success border-0 shadow-lg p-3 rounded-4 mb-3 animate-fade-in" style="pointer-events: auto;">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="rounded-circle overflow-hidden shadow-sm" style="width: 50px; height: 50px;">
+                                        @if (!string.IsNullOrEmpty(verifiedUser.ImageBase64))
+                                        {
+                                            <img src="data:image/jpeg;base64,@verifiedUser.ImageBase64" class="w-100 h-100" style="object-fit: cover;" />
+                                        }
+                                        else
+                                        {
+                                            <div class="w-100 h-100 bg-white text-success d-flex align-items-center justify-content-center fw-bold">
+                                                @(verifiedUser.Name[0])
+                                            </div>
+                                        }
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <h6 class="fw-bold mb-0">@verifiedUser.Name verified</h6>
+                                        <div class="x-small fw-bold opacity-75">Recorded: @DateTime.Now.ToString("HH:mm")</div>
+                                    </div>
+                                    <i class="bi bi-check-circle-fill fs-2"></i>
+                                </div>
+                            </div>
+                        }
+
+                        <div class="instruction-box w-100 text-center text-white py-3 rounded-4 mb-4" style="background: rgba(255,255,255,0.1); backdrop-filter: blur(5px);">
+                            <h6 class="fw-bold mb-1">@livenessInstruction</h6>
+                            <p class="x-small mb-0 opacity-75">Position worker's face in the oval</p>
+                            
+                            @if (isLivenessChallengeActive)
+                            {
+                                <div class="mt-3 text-center" style="height: 50px;">
+                                    @if (currentChallengeType == "turnLeft")
+                                    {
+                                        <i class="bi bi-arrow-left-circle-fill text-warning shadow-sm rounded-circle bg-dark" style="font-size: 2.5rem; animation: liveness-pulse 1.5s infinite;"></i>
+                                    }
+                                    else if (currentChallengeType == "turnRight")
+                                    {
+                                        <i class="bi bi-arrow-right-circle-fill text-warning shadow-sm rounded-circle bg-dark" style="font-size: 2.5rem; animation: liveness-pulse 1.5s infinite;"></i>
+                                    }
+                                    else if (currentChallengeType == "comeCloser")
+                                    {
+                                        <i class="bi bi-zoom-in text-warning shadow-sm rounded-circle bg-dark px-2" style="font-size: 2.5rem; animation: liveness-pulse 1.5s infinite;"></i>
+                                    }
+                                    else if (currentChallengeType == "moveUpDown")
+                                    {
+                                        <i class="bi bi-arrows-vertical text-warning shadow-sm rounded-circle bg-dark px-2" style="font-size: 2.5rem; animation: liveness-pulse 1.5s infinite;"></i>
+                                    }
+                                    else if (currentChallengeType == "verifying")
+                                    {
+                                        <div class="spinner-border text-success" role="status" style="width: 2.5rem; height: 2.5rem;"></div>
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        <div class="d-flex gap-2" style="pointer-events: auto;">
+                            <button class="btn btn-light btn-lg rounded-pill flex-grow-1 py-3 fw-bold shadow-lg" @onclick="CaptureAndVerify" disabled="@(isProcessing || !isFaceValid || !isLivenessVerified)">
+                                @if (isProcessing)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                    <span>Verifying...</span>
+                                }
+                                else
+                                {
+                                    <span><i class="bi @(isLivenessVerified ? "bi-person-check-fill" : "bi-shield-lock") me-2"></i> @(isLivenessVerified ? "Verify Worker" : "Complete movement check")</span>
+                                }
+                            </button>
+                            <button class="btn btn-outline-light btn-lg rounded-circle p-3 shadow-lg" @onclick="ToggleCamera">
+                                <i class="bi bi-camera-rotate fs-5"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 px-3 text-center">
+                    <p class="text-white text-opacity-50 x-small">
+                        <i class="bi bi-geo-alt-fill me-1"></i> Location and time are automatically recorded upon verification.
+                    </p>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+    .biometric-badge {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(0,0,0,0.5);
+        color: white;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.65rem;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        opacity: 0.6;
+        transition: all 0.3s ease;
+    }
+    .biometric-badge.active {
+        opacity: 1;
+        background: rgba(0,0,0,0.8);
+    }
+    .biometric-badge .indicator {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #6c757d;
+    }
+    .biometric-badge.active .indicator {
+        background: #198754;
+        box-shadow: 0 0 8px #198754;
+    }
+    .face-frame-oval {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 250px;
+        height: 330px;
+        border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+        border: 2px solid rgba(255,255,255,0.3);
+        box-shadow: 0 0 0 9999px rgba(0,0,0,0.4);
+        pointer-events: none;
+        transition: all 0.3s ease;
+    }
+    .face-frame-oval.active-valid {
+        border-color: #198754;
+        border-width: 4px;
+        box-shadow: 0 0 0 9999px rgba(0,0,0,0.2);
+    }
+    .instruction-box {
+        animation: pulse-border 2s infinite;
+    }
+    @@keyframes pulse-border {
+        0% { border: 1px solid rgba(255,255,255,0.1); }
+        50% { border: 1px solid rgba(255,255,255,0.3); }
+        100% { border: 1px solid rgba(255,255,255,0.1); }
+    }
+    @@keyframes liveness-blink {
+        0%, 100% { opacity: 1; transform: scaleY(1); }
+        50% { opacity: 0.2; transform: scaleY(0.2); }
+    }
+    @@keyframes liveness-pulse {
+        0% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.2); opacity: 0.8; }
+        100% { transform: scale(1); opacity: 1; }
+    }
+    @@media (max-width: 768px) {
+        .face-frame-oval {
+            width: 200px;
+            height: 270px;
+        }
+    }
+</style>
+
+@code {
+    private bool isAdmin = false;
+    private bool isProcessing = false;
+    private string? ErrorMessage;
+    private string livenessInstruction = "Position worker in frame";
+    private string validationStatus = "Starting camera...";
+    private bool isFaceValid = false;
+    private ValidationResults validationResults = new();
+    private User? verifiedUser;
+    private DotNetObjectReference<FieldAttendance>? selfReference;
+
+    private ElementReference videoElement;
+    private IJSObjectReference? jsModule;
+    private IJSObjectReference? faceDetectionModule;
+    private IJSObjectReference? locationModule;
+    private IJSObjectReference? livenessModule; // Added for JS liveness
+    private System.Threading.Timer? validationTimer;
+    private string currentFacingMode = "user"; // Supervisors might use back camera
+
+    // Client-side Liveness State
+    private bool isLivenessVerified = false;
+    private bool isLivenessChallengeActive = false;
+    private string currentChallengeType = string.Empty;
+    private bool _disposed = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isAdmin = AuthService.IsAdmin;
+        if (!isAdmin)
+        {
+            return;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && isAdmin)
+        {
+            try
+            {
+                jsModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/camera.js");
+                faceDetectionModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/face-detection.js");
+                locationModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/location.js");
+                try
+                {
+                    livenessModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/liveness-detection.js");
+                }
+                catch { }
+                
+                await StartCamera();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to initialize Field Attendance");
+                ErrorMessage = "Failed to initialize camera systems. Please refresh.";
+            }
+        }
+    }
+
+    private async Task StartCamera()
+    {
+        if (jsModule == null) return;
+
+        try
+        {
+            await jsModule.InvokeVoidAsync("startCamera", "video-field-attendance", currentFacingMode);
+            StartFaceValidation();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Could not access camera. Check permissions.";
+            Logger.LogError(ex, "Camera start failed");
+        }
+    }
+
+    private void StartFaceValidation()
+    {
+        validationTimer?.Dispose();
+        selfReference ??= DotNetObjectReference.Create(this);
+        
+        validationTimer = new System.Threading.Timer(async _ =>
+        {
+            if (faceDetectionModule != null && !isProcessing && !_disposed && !isLivenessChallengeActive)
+            {
+                try
+                {
+                    await faceDetectionModule.InvokeVoidAsync("validateFaceInFrame", "video-field-attendance", selfReference);
+                }
+                catch { }
+            }
+        }, null, 0, 400);
+
+        if (livenessModule != null)
+        {
+            _ = InvokeAsync(async () =>
+            {
+                try
+                {
+                    await Task.Delay(350);
+                    await livenessModule.InvokeVoidAsync("startLivenessChallenge", "video-field-attendance", selfReference, null);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning("Failed to start JS liveness challenge: {Message}", ex.Message);
+                }
+            });
+        }
+    }
+
+    [JSInvokable]
+    public void OnFaceValidationResult(FaceValidationResult result)
+    {
+        if (_disposed) return;
+
+        // Throttled UI updates
+        bool significantChange = validationResults.FaceDetected != result.FaceDetected || 
+                               validationStatus != result.Message || 
+                               isFaceValid != (isLivenessChallengeActive ? result.FaceDetected : result.IsValid);
+
+        validationResults.FaceDetected = result.FaceDetected;
+        validationResults.FaceCentered = result.FaceCentered;
+        validationResults.LightingGood = result.LightingGood;
+        validationResults.PoseGood = result.PoseGood;
+        validationResults.SizeGood = result.SizeGood;
+        
+        if (!isLivenessChallengeActive)
+        {
+            isFaceValid = result.IsValid;
+            validationStatus = result.Message;
+        }
+        else
+        {
+            isFaceValid = result.FaceDetected;
+        }
+        
+        if (significantChange)
+        {
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static bool IsLivenessMovementChallenge(string status) =>
+        status is "turnLeft" or "turnRight" or "comeCloser" or "moveUpDown";
+
+    [JSInvokable]
+    public void OnLivenessChallengeUpdate(string status, string message)
+    {
+        if (_disposed) return;
+        if (IsLivenessMovementChallenge(status))
+            currentChallengeType = status;
+
+        if (status == "error" || status == "timeout")
+        {
+            isLivenessChallengeActive = false;
+            isLivenessVerified = false;
+            validationStatus = message;
+            livenessInstruction = "Liveness Check Failed";
+        }
+        else if (status == "completed")
+        {
+            isLivenessChallengeActive = false;
+            isLivenessVerified = true;
+            validationStatus = message;
+            livenessInstruction = "Ready — center the worker's face";
+            
+            if (validationResults.FaceDetected && validationResults.LightingGood && validationResults.SizeGood && validationResults.FaceCentered)
+            {
+                isFaceValid = true;
+            }
+        }
+        else
+        {
+            isLivenessChallengeActive = true;
+            livenessInstruction = message;
+            validationStatus = "Please follow the instruction shown.";
+        }
+        
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ToggleCamera()
+    {
+        currentFacingMode = currentFacingMode == "user" ? "environment" : "user";
+        await jsModule!.InvokeVoidAsync("stopCamera", "video-field-attendance");
+        await StartCamera();
+    }
+
+    private async Task CaptureAndVerify()
+    {
+        if (!isFaceValid || isProcessing || !isLivenessVerified) return;
+
+        isProcessing = true;
+        validationTimer?.Change(Timeout.Infinite, Timeout.Infinite); // Pause validation during capture
+        ErrorMessage = null;
+        verifiedUser = null;
+        StateHasChanged();
+
+        try
+        {
+            var dataUrl = await jsModule!.InvokeAsync<string>("capturePhoto", "video-field-attendance", "canvas-field-attendance");
+            if (string.IsNullOrEmpty(dataUrl)) throw new Exception("Capture failed");
+
+            var base64 = dataUrl.Split(',')[1];
+            var bytes = Convert.FromBase64String(base64);
+            
+            // Perform Recognition (Liveness is already handled via JS)
+            using var stream = new MemoryStream(bytes);
+            var recognition = await FaceApiService.RecognizeFaceAsync(stream, UserService);
+            
+            if (!recognition.IsMatch || recognition.User == null)
+            {
+                ErrorMessage = "Worker not recognized in system.";
+                return;
+            }
+
+            double? lat = null;
+            double? lon = null;
+            string? deviceId = null;
+
+            try
+            {
+                deviceId = await locationModule!.InvokeAsync<string>("getDeviceIdentifier");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Device ID capture failed: {Message}", ex.Message);
+            }
+
+            try
+            {
+                var loc = await locationModule!.InvokeAsync<LocationCoords>("getLocation");
+                lat = loc.Latitude;
+                lon = loc.Longitude;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Field verification: GPS capture failed: {Message}", ex.Message);
+                ErrorMessage = "Location access is required to record field attendance. Please enable location in your browser and try again.";
+                return;
+            }
+
+            if (!lat.HasValue || !lon.HasValue)
+            {
+                ErrorMessage = "GPS coordinates could not be obtained. Verification cancelled.";
+                return;
+            }
+
+            // 4. Record Attendance (Automatic Clock-In)
+            // Note: We check if they are already clocked in inside the service
+            var branch = await UserService.GetBranchAsync(recognition.User.BranchId ?? "");
+            bool isOutOfArea = false;
+            if (branch != null && lat.HasValue && lon.HasValue)
+            {
+                var locService = new LocationService();
+                isOutOfArea = !locService.IsWithinGeofence(branch, lat.Value, lon.Value);
+            }
+
+            await AttendanceService.ClockInAsync(recognition.User.Id, lat, lon, isOutOfArea, deviceId);
+            
+            verifiedUser = recognition.User;
+            livenessInstruction = "Verification successful!";
+            
+            // Wait briefly before clearing for next scan
+            await Task.Delay(3000);
+            verifiedUser = null;
+            livenessInstruction = "Position worker in frame";
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "Verification error: " + ex.Message;
+            Logger.LogError(ex, "Field verification failed");
+        }
+        finally
+        {
+            isProcessing = false;
+            validationTimer?.Change(0, 150); // Resume validation
+            StateHasChanged();
+        }
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/admin");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        validationTimer?.Dispose();
+
+        try
+        {
+            if (faceDetectionModule != null) await faceDetectionModule.InvokeVoidAsync("stopFaceValidation");
+            if (livenessModule != null) await livenessModule.InvokeVoidAsync("stopLivenessChallenge");
+        }
+        catch { }
+
+        selfReference?.Dispose();
+        
+        try
+        {
+            if (jsModule != null)
+            {
+                await jsModule.InvokeVoidAsync("stopCamera", "video-field-attendance");
+                await jsModule.DisposeAsync();
+            }
+            if (faceDetectionModule != null) await faceDetectionModule.DisposeAsync();
+            if (livenessModule != null) await livenessModule.DisposeAsync();
+            if (locationModule != null) await locationModule.DisposeAsync();
+        }
+        catch { }
+    }
+
+    public class ValidationResults
+    {
+        public bool FaceDetected { get; set; }
+        public bool FaceCentered { get; set; }
+        public bool LightingGood { get; set; }
+        public bool PoseGood { get; set; }
+        public bool SizeGood { get; set; }
+    }
+
+    public class FaceValidationResult
+    {
+        public bool FaceDetected { get; set; }
+        public bool FaceCentered { get; set; }
+        public bool LightingGood { get; set; }
+        public bool PoseGood { get; set; }
+        public bool SizeGood { get; set; }
+        public bool IsValid { get; set; }
+        public string Message { get; set; } = string.Empty;
+    }
+
+    public class LocationCoords
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+    }
+}

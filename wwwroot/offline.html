@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Offline - African Ideas Attendance</title>
+    <link rel="stylesheet" href="/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      body {
+        background-color: var(--bg-body, #f4f6f9);
+        color: var(--text-main, #1e293b);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 1rem;
+      }
+      .offline-card {
+        background: var(--surface-card, #fff);
+        padding: 2rem;
+        border-radius: 1rem;
+        box-shadow: var(--shadow-lg, 0 10px 25px rgba(0, 0, 0, 0.1));
+        max-width: 100%;
+        width: 400px;
+      }
+      .icon-offline {
+        width: 3.5rem;
+        height: 3.5rem;
+        margin: 0 auto 1rem;
+        color: var(--text-muted, #94a3b8);
+      }
+      .icon-offline svg {
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="offline-card" role="main">
+      <div class="icon-offline" aria-hidden="true">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="1.5"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M2.34 8.589a9.75 9.75 0 0113.452 0M12 18.75h.008v.008H12v-.008z"
+          />
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M4 4l16 16"
+          />
+        </svg>
+      </div>
+      <h1 class="h2 fw-bold mb-3">You are offline</h1>
+      <p class="text-muted mb-4">
+        Your internet connection was lost. Check your signal and try again.
+      </p>
+      <button
+        type="button"
+        onclick="window.location.reload()"
+        class="btn btn-primary w-100 rounded-pill py-3 fw-bold"
+      >
+        Try again
+      </button>
+    </main>
+  </body>
+</html>

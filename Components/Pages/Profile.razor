@@ -1,0 +1,356 @@
+@page "/profile"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@using Africanideasfaceapi.Services
+@using Africanideasfaceapi.Models
+@using Africanideasfaceapi.Helpers
+@inject AuthService AuthService
+@inject AttendanceService AttendanceService
+@inject AbsenceService AbsenceService
+@inject CorrectionService CorrectionService
+@inject NavigationManager Navigation
+@inject UserService UserService
+
+<PageTitle>Employee Dashboard - Attendance System</PageTitle>
+
+<div class="animate-fade-in pb-4 pb-md-5">
+    <div class="row g-3 g-md-4">
+        <!-- Sidebar Profile Card -->
+        <div class="col-12 col-lg-4 mb-4 mb-lg-0">
+            <div class="glass-panel p-0 rounded-4 shadow-sm border-0 overflow-hidden mb-4" style="background: white;">
+                <div class="py-5 px-4 text-center" style="background: #e2e8f0; min-height: 180px;">
+                    <div class="profile-image-container d-inline-block position-relative">
+                        <div class="rounded-circle bg-white shadow-lg border border-4 border-white d-flex align-items-center justify-content-center overflow-hidden" style="width: 140px; height: 140px;">
+                            @if (!string.IsNullOrEmpty(user?.ImageBase64))
+                            {
+                                <img src="data:image/jpeg;base64,@user.ImageBase64" alt="Profile" style="width: 100%; height: 100%; object-fit: cover;" />
+                            }
+                            else
+                            {
+                                <span class="display-3 fw-bold text-muted opacity-25" style="letter-spacing: -2px;">X</span>
+                            }
+                        </div>
+                        <!-- Company Emblem Overlay -->
+                        <div class="position-absolute top-50 start-0 translate-middle mt-2 ms-4 bg-white rounded-circle p-1 shadow-sm border d-flex align-items-center justify-content-center" style="width: 38px; height: 38px; left: -10px !important;">
+                            <img src="/images/african-ideas-logo.png" alt="Logo" style="width: 80%;" />
+                        </div>
+                        <!-- Online Status Indicator -->
+                        <div class="position-absolute bottom-0 end-0 translate-middle-y me-2 mb-2 bg-success rounded-circle border border-4 border-white shadow-sm" style="width: 24px; height: 24px;"></div>
+                    </div>
+                </div>
+                
+                <div class="p-4" style="margin-top: -30px;">
+                    <div class="text-center mb-4">
+                        <h4 class="fw-bold text-dark mb-1" style="color: #1e293b !important;">@user?.Name @user?.Surname</h4>
+                        <div class="text-muted small mb-3 opacity-50" style="font-size: 0.75rem;">@user?.Email</div>
+                        <span class="badge rounded-pill px-4 py-2 border border-primary border-opacity-25 shadow-sm" style="background: white; color: #1e40af; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.05rem;">
+                            @user?.Role?.ToUpper()
+                        </span>
+                    </div>
+
+                    <div class="d-flex flex-column gap-1 border-top pt-4">
+                        <div class="d-flex justify-content-between align-items-center py-2">
+                            <span class="text-muted small fw-bold text-uppercase opacity-50" style="font-size: 0.65rem;">Worker ID</span>
+                            <span class="fw-bold text-dark" style="font-size: 0.85rem;">@user?.IdNumber</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center py-2">
+                            <span class="text-muted small fw-bold text-uppercase opacity-50" style="font-size: 0.65rem;">Branch</span>
+                            <span class="fw-bold text-dark" style="font-size: 0.85rem;">@(string.IsNullOrEmpty(user?.BranchId) ? "Main Hub" : user.BranchId)</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center py-2">
+                            <span class="text-muted small fw-bold text-uppercase opacity-50" style="font-size: 0.65rem;">Status</span>
+                            <span class="fw-bold text-dark" style="font-size: 0.85rem;">@user?.Status</span>
+                        </div>
+                    </div>
+
+                    <button class="btn w-100 mt-4 rounded-pill border-0 fw-bold shadow-sm py-3 transition-all hover-translate-y" 
+                            style="background: #fee2e2; color: #ef4444; font-size: 0.9rem;" @onclick="Logout">
+                        Sign Out
+                    </button>
+                </div>
+            </div>
+
+            <div class="glass-panel p-4 rounded-4 shadow-sm border-0">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="text-muted text-uppercase fw-bold mb-0 small">Shift status</h6>
+                    <span class="badge rounded-pill px-3 py-1 fw-bold" style="@GetStatusBadgeStyle()">@GetStatusBadgeText()</span>
+                </div>
+                <button type="button" class="btn btn-primary w-100 rounded-pill fw-bold" @onclick='() => Navigation.NavigateTo("/")'>
+                    <i class="bi bi-clock-history me-2"></i>Clock in / out on dashboard
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="col-12 col-lg-8">
+            <div class="d-flex justify-content-between align-items-center mb-3 mb-md-4 border-bottom pb-2 pb-md-3">
+                <div class="text-primary fw-bold" style="font-size: 0.85rem;">Profile Overview</div>
+                <div class="text-muted small d-none d-md-block">@TimeHelper.GetNow().ToString("dd MMM yyyy")</div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger border-0 bg-danger bg-opacity-10 text-danger rounded-4 px-4 py-3 mb-4 animate-fade-in d-flex align-items-center">
+                    <i class="bi bi-exclamation-triangle-fill me-3 fs-5"></i>
+                    <div class="flex-grow-1">@errorMessage</div>
+                    <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+                </div>
+            }
+
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="fw-bold mb-0 text-dark" style="color: #0f172a !important; font-size: 1.5rem;">Attendance Insights</h4>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-white rounded-pill px-4 border small bg-white text-primary fw-bold shadow-sm" style="font-size: 0.75rem;" @onclick='() => Navigation.NavigateTo("/attendance-history")'>
+                        History
+                    </button>
+                    <button class="btn btn-primary rounded-pill px-4 shadow-lg fw-bold" style="font-size: 0.75rem; background: #2563eb;" @onclick="() => showRequestChoices = true">
+                        New Request
+                    </button>
+                </div>
+            </div>
+
+            <!-- Choice Modal -->
+            @if (showRequestChoices)
+            {
+                <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5); backdrop-filter: blur(8px); z-index: 1050;">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                            <div class="modal-header border-0 bg-dark text-white p-4">
+                                <h5 class="modal-title fw-bold">Select Request Type</h5>
+                                <button type="button" class="btn-close btn-close-white" @onclick="() => showRequestChoices = false"></button>
+                            </div>
+                            <div class="modal-body p-4 bg-white">
+                                <div class="row g-3">
+                                    <div class="col-12">
+                                        <button class="btn btn-light w-100 p-3 text-start d-flex align-items-center gap-3 border transition-all hover-translate-y" @onclick='() => { showRequestChoices = false; Navigation.NavigateTo("/leave"); }'>
+                                            <div class="bg-primary bg-opacity-10 p-2 rounded-3 text-primary"><i class="bi bi-calendar-event fs-4"></i></div>
+                                            <div>
+                                                <div class="fw-bold">Leave Application</div>
+                                                <div class="text-muted small">Submit requests for annual, sick, or personal leave.</div>
+                                            </div>
+                                        </button>
+                                    </div>
+                                    <div class="col-12">
+                                        <button class="btn btn-light w-100 p-3 text-start d-flex align-items-center gap-3 border transition-all hover-translate-y" @onclick='() => { showRequestChoices = false; Navigation.NavigateTo("/absences"); }'>
+                                            <div class="bg-warning bg-opacity-10 p-2 rounded-3 text-warning"><i class="bi bi-exclamation-triangle fs-4"></i></div>
+                                            <div>
+                                                <div class="fw-bold">Explain Absence</div>
+                                                <div class="text-muted small">Provide reasons for missed shifts or unexplained absences.</div>
+                                            </div>
+                                        </button>
+                                    </div>
+                                    <div class="col-12">
+                                        <button class="btn btn-light w-100 p-3 text-start d-flex align-items-center gap-3 border transition-all hover-translate-y" @onclick='() => { showRequestChoices = false; Navigation.NavigateTo("/absences"); }'>
+                                            <div class="bg-success bg-opacity-10 p-2 rounded-3 text-success"><i class="bi bi-clock-history fs-4"></i></div>
+                                            <div>
+                                                <div class="fw-bold">Time Correction</div>
+                                                <div class="text-muted small">Correct errors in clock-in or clock-out times.</div>
+                                            </div>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <!-- Recent Activity Table -->
+            <div class="glass-panel p-0 rounded-4 shadow-sm border-0 overflow-hidden mb-5" style="background: white;">
+                <div class="p-4 border-bottom d-flex align-items-center gap-3">
+                    <h5 class="mb-0 fw-bold text-dark" style="font-size: 1.1rem;">Recent Activity</h5>
+                    <span class="badge rounded-pill px-3 py-1" style="background: #e2e8f0; color: #1e3a8a; font-size: 0.7rem;">Top 7</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead class="text-uppercase small" style="color: #94a3b8; font-size: 0.65rem; letter-spacing: 0.05rem;">
+                            <tr>
+                                <th class="ps-4 border-0 py-4">Date</th>
+                                <th class="border-0 py-4">Clock In</th>
+                                <th class="border-0 py-4">Clock Out</th>
+                                <th class="border-0 py-4">Duration</th>
+                                <th class="text-end pe-4 border-0 py-4">Status & Action</th>
+                            </tr>
+                        </thead>
+                        <tbody style="font-size: 0.85rem;">
+                            @if (isLoading)
+                            {
+                                <tr><td colspan="5" class="text-center py-5"><div class="spinner-border spinner-border-sm text-primary"></div></td></tr>
+                            }
+                            else if (recentAttendances == null || !recentAttendances.Any())
+                            {
+                                <tr>
+                                    <td colspan="5" class="text-center py-5 text-muted opacity-50">
+                                        No attendance activity recorded yet.
+                                    </td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var att in recentAttendances.OrderByDescending(a => a.Date).Take(7))
+                                {
+                                    <tr class="border-top">
+                                        <td class="ps-4 py-3 fw-bold text-dark">@att.Date.ToString("ddd, dd MMM")</td>
+                                        <td class="py-3">@(att.ClockInTime?.ToString("HH:mm") ?? "--:--")</td>
+                                        <td class="py-3">@(att.ClockOutTime?.ToString("HH:mm") ?? "--:--")</td>
+                                        <td class="py-3">@(att.TotalHours > 0 ? $"{att.TotalHours:F1}h" : "-")</td>
+                                        <td class="text-end pe-4 py-3">
+                                            <div class="d-flex justify-content-end align-items-center gap-2">
+                                                <span class="badge rounded-pill px-3" style="background: #f1f5f9; color: #64748b; font-size: 0.7rem;">Regular</span>
+                                                <button class="btn btn-sm btn-light rounded-circle shadow-inner border-0" style="width: 32px; height: 32px;" @onclick='() => Navigation.NavigateTo($"/attendance/correction/{att.Id}")'>
+                                                    <i class="bi bi-pencil text-muted"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Correction Requests -->
+            <div class="glass-panel p-4 rounded-4 shadow-sm border-0" style="background: white;">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h5 class="fw-bold mb-0 text-dark" style="font-size: 1.1rem;">Recent Correction Requests</h5>
+                    <span class="badge rounded-pill px-3 py-1 border text-muted" style="background: #f8fafc; font-size: 0.7rem;">Total: @(corrections?.Count ?? 0)</span>
+                </div>
+                
+                @if (isLoading)
+                {
+                    <div class="text-center p-5 rounded-4 border-0" style="background: #f8fafc;">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">Loading…</span></div>
+                        <p class="text-muted small mt-2 mb-0">Loading correction requests…</p>
+                    </div>
+                }
+                else if (corrections == null || !corrections.Any())
+                {
+                    <div class="text-center p-5 rounded-4 border-0" style="background: #f8fafc;">
+                        <p class="text-muted mb-0 opacity-75">No active adjustment requests.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="d-flex flex-column gap-3">
+                        @foreach (var req in corrections.OrderByDescending(r => r.CreatedAt).Take(3))
+                        {
+                            <div class="p-3 bg-white border-0 rounded-4 shadow-sm d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="rounded-circle bg-light d-flex align-items-center justify-content-center" style="width: 44px; height: 44px;">
+                                        <i class="bi bi-clock-history text-muted"></i>
+                                    </div>
+                                    <div>
+                                        <div class="fw-bold text-dark">@req.CreatedAt.ToString("dd MMM yyyy")</div>
+                                        <div class="text-muted small">@req.Reason</div>
+                                    </div>
+                                </div>
+                                <span class="badge rounded-pill px-3 py-2 border @(req.Status == "Approved" ? "text-success border-success" : req.Status == "Rejected" ? "text-danger border-danger" : "text-warning border-warning") bg-white" style="font-size: 0.7rem;">@req.Status</span>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private User? user;
+    private List<Africanideasfaceapi.Models.Attendance>? recentAttendances;
+    private List<Absence>? absences;
+    private List<AttendanceCorrection>? corrections;
+    private bool isLoading = true;
+    private bool showRequestChoices = false;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        user = AuthService.CurrentUser;
+        // Don't redirect here, wait for OnAfterRender to check persistence
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            if (user == null)
+            {
+                Navigation.NavigateTo("/login");
+                return;
+            }
+            
+            // Ensure we have the full user object with image
+            var fullUser = await UserService.GetUserByIdAsync(user.Id);
+            if (fullUser != null)
+            {
+                user = fullUser;
+                AuthService.UpdateCurrentUser(user);
+            }
+
+            await LoadDashboardData();
+        }
+    }
+
+    private async Task LoadDashboardData()
+    {
+        isLoading = true;
+        errorMessage = null;
+        try
+        {
+            recentAttendances = await AttendanceService.GetEmployeeAttendanceAsync(user!.Id);
+            absences = await AbsenceService.GetEmployeeAbsencesAsync(user!.Id);
+            corrections = await CorrectionService.GetEmployeeRequestsAsync(user!.Id);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Problem loading dashboard data. Please refresh.";
+            Console.WriteLine($"Error loading dashboard: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task Logout()
+    {
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/login");
+    }
+
+    private void ShowAllHistory() 
+    {
+        Navigation.NavigateTo("/absences");
+    }
+    
+    private void NewCorrection() 
+    {
+        // Redirect to absences/history to select a record
+        // Ideally we would show a toast here, but simple navigation works for now
+        Navigation.NavigateTo("/absences");
+    }
+
+    private string GetStatusBadgeText()
+    {
+        return user?.IsClockedIn == true ? "ON DUTY" : "OFF DUTY";
+    }
+
+    private string GetStatusBadgeStyle()
+    {
+        if (user?.IsClockedIn == true)
+        {
+            return "background: #10b981; color: white; font-size: 0.6rem;";
+        }
+        return "background: #3b82f6; color: white; font-size: 0.6rem;";
+    }
+
+    private string GetStatusClass(string status) => status switch
+    {
+        "Approved" => "bg-success",
+        "Pending" => "bg-warning text-dark",
+        "Rejected" => "bg-danger",
+        _ => "bg-secondary"
+    };
+}

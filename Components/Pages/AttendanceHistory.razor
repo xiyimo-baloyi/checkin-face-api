@@ -1,0 +1,194 @@
+@page "/attendance-history"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@using Africanideasfaceapi.Models
+@using Africanideasfaceapi.Services
+@using Africanideasfaceapi.Helpers
+@inject AttendanceService AttendanceService
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Attendance History - Attendance System</PageTitle>
+
+<div class="animate-fade-in pb-4 pb-md-5">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 mb-md-5 border-bottom pb-3 gap-3">
+        <div>
+            <h2 class="fw-bold mb-1 text-dark" style="color: #0f172a !important; font-size: clamp(1.5rem, 4vw, 2rem);">Attendance Logs</h2>
+            <p class="text-muted mb-0 opacity-75 d-none d-md-block">A complete timeline of your shift activity.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-light rounded-pill px-3 border shadow-sm fw-bold" style="font-size: 0.85rem;" @onclick='() => Navigation.NavigateTo("/absences")'>
+                <i class="bi bi-exclamation-triangle me-2"></i> Explain Absence
+            </button>
+            <button class="btn btn-white rounded-pill px-3 px-md-4 border shadow-sm transition-all hover-translate-y fw-bold" style="font-size: 0.85rem;" @onclick="GoBack">
+                <i class="bi bi-arrow-left me-2"></i> Back
+            </button>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="d-flex justify-content-center align-items-center" style="min-height: 40vh;">
+            <div class="spinner-border text-primary" style="width: 2rem; height: 2rem; border-width: 3px;"></div>
+        </div>
+    }
+    else if (attendanceRecords == null)
+    {
+        <div class="glass-panel p-5 rounded-4 shadow-sm text-center" style="background: #fef2f2;">
+            <div class="mb-3">
+                <i class="bi bi-exclamation-triangle text-danger opacity-75" style="font-size: 2.5rem;"></i>
+            </div>
+            <h4 class="fw-bold text-dark mb-2">Unable to load history</h4>
+            <p class="text-muted mb-0">Something went wrong while loading your attendance. Please try again or go back and reopen this page.</p>
+        </div>
+    }
+    else if (!attendanceRecords.Any())
+    {
+        <div class="glass-panel p-5 rounded-4 shadow-sm text-center" style="background: #f8fafc;">
+            <div class="mb-4">
+                <i class="bi bi-calendar-x text-muted opacity-25" style="font-size: 4rem;"></i>
+            </div>
+            <h4 class="fw-bold text-dark mb-2">No Records Found</h4>
+            <p class="text-muted mb-0 opacity-75">You haven't recorded any attendance sessions yet.</p>
+        </div>
+    }
+    else
+    {
+        <div class="glass-panel p-0 rounded-4 shadow-sm border-0 overflow-hidden" style="background: white;">
+            <div class="p-4 border-bottom d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold mb-0 text-dark" style="font-size: 1.1rem;">Full History</h5>
+                <span class="badge rounded-pill px-3 py-1 border text-muted" style="background: #f8fafc; font-size: 0.7rem;">Total Sessions: @attendanceRecords.Count</span>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-mobile-cards align-middle mb-0">
+                    <thead class="text-uppercase small" style="color: #94a3b8; font-size: 0.65rem; letter-spacing: 0.05rem;">
+                        <tr>
+                            <th class="ps-4 border-0 py-4">Date</th>
+                            <th class="border-0 py-4">Clock In</th>
+                            <th class="border-0 py-4">Clock Out</th>
+                            <th class="border-0 py-4 text-center">Work Hours</th>
+                            <th class="border-0 py-4 text-center">Overtime</th>
+                            <th class="border-0 py-4">Location</th>
+                            <th class="text-end pe-4 border-0 py-4">Status & Action</th>
+                        </tr>
+                    </thead>
+                    <tbody style="font-size: 0.85rem;">
+                        @foreach (var record in attendanceRecords)
+                        {
+                            <tr class="border-top">
+                                <td class="ps-4 py-4" data-label="Date">
+                                    <div class="fw-bold text-dark">@record.Date.ToString("dd MMM yyyy")</div>
+                                    <div class="text-muted small">@record.Date.ToString("dddd")</div>
+                                </td>
+                                <td class="py-4" data-label="Clock In">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="rounded-circle bg-success bg-opacity-10 p-1 text-success"><i class="bi bi-arrow-up-right small" aria-hidden="true"></i></div>
+                                        <span>@(record.ClockInTime?.ToLocalTime().ToString("HH:mm") ?? "--:--")</span>
+                                    </div>
+                                </td>
+                                <td class="py-4" data-label="Clock Out">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="rounded-circle bg-danger bg-opacity-10 p-1 text-danger"><i class="bi bi-arrow-down-left small" aria-hidden="true"></i></div>
+                                        <span>@(record.ClockOutTime?.ToLocalTime().ToString("HH:mm") ?? "--:--")</span>
+                                    </div>
+                                </td>
+                                <td class="py-4 text-center" data-label="Work Hours">
+                                    <span class="fw-bold">@record.ShiftHours.GetValueOrDefault().ToString("F1")h</span>
+                                </td>
+                                <td class="py-4 text-center" data-label="Overtime">
+                                    @if (record.OvertimeHours > 0)
+                                    {
+                                        <span class="badge rounded-pill px-3 py-1" style="background: #fff7ed; color: #9a3412; font-size: 0.7rem;">+@record.OvertimeHours.GetValueOrDefault().ToString("F1")h</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted opacity-50 px-2">-</span>
+                                    }
+                                </td>
+                                <td class="py-4" data-label="Location">
+                                    @if (record.Latitude.HasValue && record.Longitude.HasValue)
+                                    {
+                                        <a href="https://www.google.com/maps?q=@(record.Latitude),@(record.Longitude)" target="_blank" rel="noopener" class="text-decoration-none d-inline-flex align-items-center gap-1">
+                                            <i class="bi bi-geo-alt-fill text-danger"></i>
+                                            <span class="small">@record.Latitude.Value.ToString("F4"), @record.Longitude.Value.ToString("F4")</span>
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted opacity-50 small">No GPS</span>
+                                    }
+                                </td>
+                                <td class="text-end pe-4 py-4" data-label="Status">
+                                    <div class="d-flex justify-content-end align-items-center gap-3">
+                                        <span class="badge rounded-pill px-3" style="@GetStatusBadgeStyle(record.Status)">@(record.Status ?? "Present")</span>
+                                        <button class="btn btn-sm btn-light rounded-circle shadow-inner border-0" style="width: 32px; height: 32px;" title="Request Correction" @onclick='() => Navigation.NavigateTo($"/attendance/correction/{record.Id}")'>
+                                            <i class="bi bi-pencil text-muted"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<Africanideasfaceapi.Models.Attendance>? attendanceRecords;
+    private bool isLoading = true;
+    private User? user;
+
+    protected override async Task OnInitializedAsync()
+    {
+        user = AuthService.CurrentUser;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            if (user == null)
+            {
+                Navigation.NavigateTo("/login");
+                return;
+            }
+
+            await LoadHistory();
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadHistory()
+    {
+        if (user == null) return;
+        isLoading = true;
+        try 
+        {
+            attendanceRecords = await AttendanceService.GetEmployeeAttendanceAsync(user.Id);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading history: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/profile");
+    }
+
+    private string GetStatusBadgeStyle(string? status) => status switch
+    {
+        "Present" => "background: #f1f5f9; color: #64748b; font-size: 0.7rem;",
+        "Late" => "background: #fee2e2; color: #991b1b; font-size: 0.7rem;",
+        "Overtime" => "background: #dcfce7; color: #166534; font-size: 0.7rem;",
+        _ => "background: #f1f5f9; color: #64748b; font-size: 0.7rem;"
+    };
+}

@@ -1,0 +1,203 @@
+@page "/notifications"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@using Africanideasfaceapi.Models
+@using Africanideasfaceapi.Services
+@using Africanideasfaceapi.Helpers
+@inject AppNotificationService NotificationService
+@inject AuthService Auth
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Notifications - African Ideas</PageTitle>
+
+<div class="container py-4 animate-fade-in pb-5">
+    <div class="d-flex align-items-center gap-3 mb-5 mt-2">
+        <button class="btn btn-icon btn-white rounded-circle shadow-sm" @onclick="GoBack">
+            <i class="bi bi-arrow-left"></i>
+        </button>
+        <div>
+            <h1 class="h3 fw-bold mb-0 text-dark">Intelligence Alerts</h1>
+            <p class="text-muted small mb-0 fw-bold opacity-75 text-uppercase letter-spacing-wide">Activity Registry & Policy Signals</p>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="d-flex flex-column align-items-center justify-content-center py-5">
+            <div class="spinner-border text-primary mb-3" role="status"></div>
+            <p class="text-muted small fw-bold">Synchronizing registry...</p>
+        </div>
+    }
+    else if (notifications == null || !notifications.Any())
+    {
+        <div class="glass-panel p-5 text-center bg-white border-0 shadow-sm rounded-4">
+            <div class="rounded-circle bg-light d-flex align-items-center justify-content-center mx-auto mb-4 animate-float" style="width: 80px; height: 80px;">
+                <i class="bi bi-bell-slash text-muted fs-1 opacity-50"></i>
+            </div>
+            <h5 class="fw-bold text-dark">No active alerts</h5>
+            <p class="text-muted small px-lg-5">Your intelligence registry is currently clear. Key policy events and activity updates will appear here.</p>
+            <button class="btn btn-primary rounded-pill px-4 mt-3 fw-bold shadow-sm" @onclick='() => Navigation.NavigateTo("/")'>Return to Terminal</button>
+        </div>
+    }
+    else
+    {
+        <div class="d-flex justify-content-between align-items-center mb-4 px-2">
+            <span class="badge bg-primary bg-opacity-10 text-primary rounded-pill px-3 py-2 fw-bold">
+                @notifications.Count(n => !n.IsRead) Unread Signals
+            </span>
+            @if (notifications.Any(n => !n.IsRead))
+            {
+                <button class="btn btn-link text-primary text-decoration-none small fw-bold p-0" @onclick="MarkAllAsRead">
+                    Mark all as read
+                </button>
+            }
+        </div>
+
+        <div class="notification-list d-flex flex-column gap-3">
+            @foreach (var note in notifications)
+            {
+                <div class="glass-panel p-3 p-md-4 rounded-4 shadow-sm border-0 transition-all @(note.IsRead ? "opacity-75 bg-light" : "bg-white border-start border-primary border-4")" 
+                     style="cursor: default;">
+                    <div class="d-flex gap-3">
+                        <div class="flex-shrink-0">
+                            <div class="rounded-circle d-flex align-items-center justify-content-center shadow-inner" 
+                                 style="width: 48px; height: 48px; background: @GetIconBg(note.Type);">
+                                <i class="bi @GetIcon(note.Type) fs-4"></i>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-start mb-1">
+                                <h6 class="fw-bold mb-0 text-dark @(note.IsRead ? "text-muted" : "")">@note.Title</h6>
+                                <span class="x-small text-muted opacity-75">@TimeHelper.GetTimeAgo(note.SentAt)</span>
+                            </div>
+                            <p class="small text-muted mb-3 @(note.IsRead ? "" : "text-dark")">@note.Message</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="badge bg-light text-muted x-small border fw-normal">@note.Type</span>
+                                <div class="d-flex gap-2">
+                                    @if (!note.IsRead)
+                                    {
+                                        <button class="btn btn-sm btn-white rounded-pill px-3 py-1 shadow-xs border x-small fw-bold transition-all hover-translate-y" 
+                                                @onclick="() => MarkAsRead(note)">
+                                            Acknowledge
+                                        </button>
+                                    }
+                                    <button class="btn btn-icon btn-sm btn-light text-danger rounded-circle" 
+                                            @onclick="() => DeleteNotification(note)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+        
+        <div class="text-center mt-5 mb-4">
+            <p class="x-small text-muted opacity-50 fw-bold text-uppercase letter-spacing-wide">End of Intelligence Feed</p>
+        </div>
+    }
+</div>
+
+@code {
+    private List<Notification>? notifications;
+    private bool isLoading = true;
+    private User? currentUser;
+
+    protected override async Task OnInitializedAsync()
+    {
+        currentUser = Auth.CurrentUser;
+        if (currentUser == null)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        await LoadNotifications();
+    }
+
+    private async Task LoadNotifications()
+    {
+        isLoading = true;
+        try
+        {
+            notifications = await NotificationService.GetUserNotificationsAsync(currentUser!.Id);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading notifications: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task MarkAsRead(Notification note)
+    {
+        try
+        {
+            await NotificationService.MarkAsReadAsync(note.Id);
+            note.IsRead = true;
+            StateHasChanged();
+            
+            // Trigger layout badge update
+            await JS.InvokeVoidAsync("analytics.dispatchNotificationUpdate");
+        }
+        catch { }
+    }
+
+    private async Task MarkAllAsRead()
+    {
+        if (notifications == null || !notifications.Any()) return;
+        
+        try
+        {
+            foreach (var note in notifications.Where(n => !n.IsRead))
+            {
+                await NotificationService.MarkAsReadAsync(note.Id);
+                note.IsRead = true;
+            }
+            StateHasChanged();
+            await JS.InvokeVoidAsync("analytics.dispatchNotificationUpdate");
+        }
+        catch { }
+    }
+
+    private async Task DeleteNotification(Notification note)
+    {
+        try
+        {
+            await NotificationService.DeleteNotificationAsync(note.Id);
+            notifications?.Remove(note);
+            StateHasChanged();
+            await JS.InvokeVoidAsync("analytics.dispatchNotificationUpdate");
+        }
+        catch { }
+    }
+
+    private void GoBack() => Navigation.NavigateTo("/");
+
+    private string GetIcon(string type) => type switch
+    {
+        "LateArrival" => "bi-clock-history",
+        "MissedClockOut" => "bi-exclamation-triangle",
+        "LowConfidence" => "bi-shield-exclamation",
+        "SecurityAlert" => "bi-shield-lock",
+        "Leave" => "bi-calendar-check",
+        "Correction" => "bi-pencil-square",
+        _ => "bi-bell"
+    };
+
+    private string GetIconBg(string type) => type switch
+    {
+        "LateArrival" => "#fff7ed",
+        "MissedClockOut" => "#fef2f2",
+        "LowConfidence" => "#fff1f2",
+        "SecurityAlert" => "#fee2e2",
+        "Leave" => "#f0f9ff",
+        "Correction" => "#fdf4ff",
+        _ => "#f8fafc"
+    };
+}

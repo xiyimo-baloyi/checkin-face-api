@@ -1,0 +1,55 @@
+.remote-work-page .stat-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 1rem;
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+@media (hover: hover) {
+    .remote-work-page .stat-card:hover {
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+        transform: translateY(-2px);
+    }
+}
+
+.remote-work-page .request-row {
+    border-bottom: 1px solid #f1f5f9;
+    transition: background-color 0.15s ease;
+}
+
+@media (hover: hover) {
+    .remote-work-page .request-row:hover {
+        background-color: #f8fafc;
+    }
+}
+
+.remote-work-page .request-row:last-child {
+    border-bottom: none;
+}
+
+.remote-work-page .hint-box {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 1rem;
+    color: #1e3a8a;
+}
+
+.remote-work-page .mobile-tabs .btn {
+    min-height: 44px;
+    font-weight: 600;
+}
+
+.remote-work-page .char-count {
+    font-size: 0.75rem;
+    color: #64748b;
+}
+
+.remote-work-page .char-count.is-low {
+    color: #b45309;
+}
+
+.remote-work-page .quick-date-btn {
+    min-height: 36px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}

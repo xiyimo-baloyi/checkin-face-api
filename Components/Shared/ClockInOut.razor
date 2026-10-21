@@ -1,0 +1,377 @@
+@using Africanideasfaceapi.Services
+@using Africanideasfaceapi.Models
+@using Microsoft.JSInterop
+@using Africanideasfaceapi.Helpers
+@inject AuthService AuthService
+@inject AttendanceService AttendanceService
+@inject UserService UserService
+@inject LocationService LocationService
+@inject AppNotificationService NotificationService
+@inject SettingsService SettingsService
+@inject RemoteWorkService RemoteWorkService
+@inject IJSRuntime JSRuntime
+@inject ILogger<ClockInOut> Logger
+@implements IAsyncDisposable
+
+@if (user != null)
+{
+    <div class="attendance-action-container">
+
+        @if (locationPermissionDenied)
+        {
+            <div class="alert alert-warning border-0 rounded-4 px-3 py-3 mb-3 animate-fade-in d-flex align-items-start" style="background: #fff7ed; color: #9a3412;">
+                <i class="bi bi-geo-alt-fill me-3 fs-4 mt-1"></i>
+                <div>
+                    <h6 class="fw-bold mb-1">Location Access Required</h6>
+                    <p class="mb-0 small opacity-75">We couldn't detect your location. Please <strong>Allow Location Access</strong> in your browser settings (look for the icon in the address bar) to proceed.</p>
+                </div>
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(ErrorMessage))
+        {
+            <div class="alert alert-danger border-0 rounded-4 px-3 py-2 mb-3 animate-fade-in d-flex align-items-center" style="background: #fee2e2; color: #991b1b;">
+                <i class="bi bi-exclamation-circle-fill me-2"></i>
+                <small class="fw-bold">@ErrorMessage</small>
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(SuccessMessage))
+        {
+            <div class="alert alert-success border-0 rounded-4 px-3 py-2 mb-3 animate-fade-in d-flex align-items-center" style="background: #dcfce7; color: #166534;">
+                <i class="bi bi-check-circle-fill me-2 fs-5"></i>
+                <small class="fw-bold">@SuccessMessage</small>
+            </div>
+        }
+
+        <div class="text-center">
+            @if (user.IsClockedIn == true && user.LastClockInTime.HasValue)
+            {
+                <h6 class="text-muted small fw-bold text-uppercase mb-2 opacity-50" style="letter-spacing: 0.05rem;">Active Session Duration</h6>
+                <div class="display-5 fw-bold text-dark mb-2 mobile-h2">@GetHoursWorked()</div>
+                
+                @if (isOvertime)
+                {
+                    <div class="mb-3">
+                        <span class="badge bg-warning bg-opacity-10 text-warning rounded-pill px-3 py-2 fw-bold" style="font-size: 0.75rem;">
+                            <i class="bi bi-clock-history me-1"></i> Overtime Performance
+                        </span>
+                    </div>
+                }
+                
+                <button class="btn btn-lg rounded-pill shadow-lg border-0 py-3 px-5 fw-bold transition-all hover-translate-y w-100" 
+                        style="background: #ef4444; color: white; min-height: 56px;" @onclick="StartClockOut" disabled="@(isProcessing || locationPermissionDenied)">
+                    @if (isProcessing) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                    End Shift
+                </button>
+            }
+            else
+            {
+                <div class="mb-4 pt-2">
+                    <h6 class="fw-bold mb-3 mobile-h4 text-muted">Ready to start your shift?</h6>
+                </div>
+                <button class="btn btn-lg rounded-pill shadow-lg border-0 py-3 px-5 fw-bold transition-all hover-translate-y w-100 animate-pulse-soft" 
+                        style="background: #10b981; color: white; font-size: 1.25rem; min-height: 64px;" @onclick="StartClockIn" disabled="@(isProcessing || locationPermissionDenied)">
+                    @if (isProcessing) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                    Start Shift
+                </button>
+            }
+            
+            <p class="text-muted small mt-4 mb-0 opacity-50" style="font-size: 0.7rem; line-height: 1.4;">
+                <i class="bi bi-geo-alt-fill me-1"></i> GPS verification required for all attendance actions.
+            </p>
+        </div>
+    </div>
+}
+
+
+@code {
+    [Parameter]
+    public EventCallback OnClockStatusChanged { get; set; }
+
+    [Parameter]
+    public User? User { get; set; }
+
+    private User? user;
+    private bool isProcessing = false;
+    private bool locationPermissionDenied = false;
+    private string? ErrorMessage;
+    private string? SuccessMessage;
+    private string clockAction = "in"; // "in" or "out"
+    private bool isOvertime = false;
+    private double standardShiftHours = 8.0;
+    
+    private IJSObjectReference? locationModule;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (User != null)
+        {
+            user = User;
+        }
+        else
+        {
+            user = AuthService.CurrentUser;
+        }
+
+        if (user == null)
+        {
+            // Persistence recovery is now disabled
+        }
+
+        // We don't set ErrorMessage here anymore if user is null, 
+        // to allow parent pages to handle the verified session state.
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (User != null)
+        {
+            user = User;
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                locationModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/location.js");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to load location JS module");
+            }
+        }
+    }
+
+    private string GetHoursWorked()
+    {
+        if (user?.LastClockInTime.HasValue == true)
+        {
+            try
+            {
+                var duration = TimeHelper.GetNow() - user.LastClockInTime.Value;
+                if (duration.TotalMinutes < 0) return "0h 0m";
+                
+                isOvertime = duration.TotalHours >= standardShiftHours;
+                
+                return $"{(int)duration.TotalHours}h {duration.Minutes}m";
+            }
+            catch
+            {
+                return "0h 0m";
+            }
+        }
+        return "0h 0m";
+    }
+
+    private async Task StartClockIn()
+    {
+        if (user == null) return;
+        isProcessing = true;
+        ErrorMessage = null;
+        SuccessMessage = null;
+        clockAction = "in";
+        StateHasChanged();
+
+        await HandleClockAction();
+    }
+
+    private async Task StartClockOut()
+    {
+        if (user == null) return;
+        isProcessing = true;
+        ErrorMessage = null;
+        SuccessMessage = null;
+        clockAction = "out";
+        StateHasChanged();
+
+        await HandleClockAction();
+    }
+
+    private async Task HandleClockAction()
+    {
+        try
+        {
+            locationPermissionDenied = false;
+            double? latitude = null;
+            double? longitude = null;
+            string? deviceId = null;
+
+            if (locationModule != null)
+            {
+                try
+                {
+                    deviceId = await locationModule.InvokeAsync<string>("getDeviceIdentifier");
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning("Device ID capture failed: {Message}", ex.Message);
+                }
+
+                try
+                {
+                    var loc = await locationModule.InvokeAsync<LocationCoords>("getLocation");
+                    latitude = loc.Latitude;
+                    longitude = loc.Longitude;
+                    locationPermissionDenied = false;
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning("Location capture failed: {Message}", ex.Message);
+                    locationPermissionDenied = true;
+                    throw new InvalidOperationException("Location access is required to " + (clockAction == "in" ? "start" : "end") + " your shift. Please ensure location is enabled in your browser.");
+                }
+            }
+            else
+            {
+                throw new InvalidOperationException("Location System Not Ready: Please refresh the page and ensure your browser supports geolocation.");
+            }
+
+            if (clockAction == "in")
+            {
+                await PerformClockIn(latitude, longitude, deviceId);
+            }
+            else
+            {
+                await PerformClockOut();
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            Logger.LogError(ex, "Clock {Action} failed", clockAction);
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task PerformClockIn(double? latitude, double? longitude, string? deviceId)
+    {
+        if (user == null) return;
+
+        try
+        {
+            // Check geofencing
+            bool isOutOfArea = false;
+            if (latitude.HasValue && longitude.HasValue && !string.IsNullOrEmpty(user.BranchId))
+            {
+                var branch = await UserService.GetBranchAsync(user.BranchId);
+                if (branch != null)
+                {
+                    isOutOfArea = !LocationService.IsWithinGeofence(branch, latitude.Value, longitude.Value);
+                }
+            }
+
+            // Clock in
+            var attendance = await AttendanceService.ClockInAsync(user.Id, latitude, longitude, isOutOfArea, deviceId);
+            
+            // Refresh user data
+            user = await UserService.GetUserByIdAsync(user.Id);
+            AuthService.UpdateCurrentUser(user);
+
+            SuccessMessage = $"Successfully clocked in at {attendance.ClockInTime?.ToString("HH:mm")}";
+            
+            if (isOutOfArea)
+            {
+                SuccessMessage += " (Out of designated area)";
+            }
+
+            // Check for late arrival
+            if (attendance.ClockInTime.HasValue)
+            {
+                _ = NotificationService.AlertLateArrivalAsync(user!, attendance.ClockInTime.Value);
+            }
+
+            await OnClockStatusChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            var detail = ex.InnerException?.Message ?? ex.Message;
+            ErrorMessage = $"Failed to clock in: {detail}";
+            Logger.LogError(ex, "Clock in failed for user {UserId}", user?.Id);
+        }
+        finally
+        {
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task PerformClockOut()
+    {
+        if (user == null) return;
+
+        try
+        {
+            var attendance = await AttendanceService.ClockOutAsync(user.Id);
+            
+            if (attendance == null)
+            {
+                // Refresh user data immediately to see if state was auto-corrected
+                var freshUser = await UserService.GetUserByIdAsync(user.Id);
+                if (freshUser != null)
+                {
+                    user = freshUser;
+                    AuthService.UpdateCurrentUser(user);
+
+                    if (user.IsClockedIn == false)
+                    {
+                        SuccessMessage = "Session state corrected. You are now clocked out.";
+                        ErrorMessage = null;
+                        
+                        // IMPORTANT: Notify parent components so headers/sidebars update too
+                        await OnClockStatusChanged.InvokeAsync();
+                    }
+                    else
+                    {
+                        ErrorMessage = "No active clock-in found for today.";
+                    }
+                }
+                
+                isProcessing = false;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            // Refresh user data
+            user = await UserService.GetUserByIdAsync(user.Id);
+            AuthService.UpdateCurrentUser(user);
+
+            SuccessMessage = $"Successfully clocked out at {attendance.ClockOutTime?.ToString("HH:mm")}. Total hours: {attendance.TotalHours:F1}h";
+
+            await OnClockStatusChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Failed to clock out: {ex.Message}";
+            Logger.LogError(ex, "Clock out failed for user {UserId}", user?.Id);
+        }
+        finally
+        {
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (locationModule != null)
+            {
+                await locationModule.DisposeAsync();
+            }
+        }
+        catch { }
+    }
+
+    public class LocationCoords
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+    }
+}

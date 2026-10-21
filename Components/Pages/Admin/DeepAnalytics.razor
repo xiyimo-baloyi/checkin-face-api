@@ -1,0 +1,902 @@
+@page "/admin/deep-analytics"
+@using Africanideasfaceapi.Services
+@using Africanideasfaceapi.Helpers
+@using Microsoft.AspNetCore.SignalR.Client
+@inject AnalyticsService AnalyticsService
+@inject AuthService Auth
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
+
+<PageTitle>Deep Analytics - Biometric Intelligence Hub</PageTitle>
+
+<div class="container-fluid mt-4 animate-fade-in pb-5">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
+        <div class="d-flex align-items-center gap-3 w-100 w-md-auto">
+            <div class="bg-white rounded-circle p-1 d-flex align-items-center justify-content-center shadow-sm d-none d-md-flex" style="width: 50px; height: 50px;">
+                <img src="/images/african-ideas-logo.png" alt="Logo" class="w-100" />
+            </div>
+            <div>
+                <h2 class="fw-bold mb-1 text-primary d-flex align-items-center flex-wrap mobile-h2">
+                    Deep Analytics Hub
+                    @if (hubConnection?.State == HubConnectionState.Connected)
+                    {
+                        <span class="badge bg-danger rounded-pill ms-2 ms-md-3 shadow-sm animate-pulse" style="font-size: 0.6rem; vertical-align: middle;">
+                            <i class="bi bi-broadcast me-1"></i> LIVE
+                        </span>
+                    }
+                </h2>
+                <div class="d-flex align-items-center flex-wrap">
+                    <p class="text-muted mb-0 me-2 small mobile-d-none">Biometric health monitoring, attendance intelligence & system performance</p>
+                    @if (!string.IsNullOrEmpty(lastUpdateMessage))
+                    {
+                        <span class="badge bg-info bg-opacity-10 text-info fw-normal animate-fade-in mt-2 mt-md-0">
+                            <i class="bi bi-activity me-1"></i> @lastUpdateMessage
+                        </span>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="d-flex gap-2 align-items-center w-100 w-md-auto justify-content-between justify-content-md-end">
+            <div class="glass-panel p-2 rounded-pill d-flex align-items-center shadow-sm flex-grow-1 flex-md-grow-0 justify-content-between">
+                <span class="text-muted px-2 px-md-3 small fw-bold text-uppercase letter-spacing-wide d-none d-md-inline">Period:</span>
+                <select class="form-select border-0 bg-transparent fw-bold text-primary py-0 text-center text-md-start w-100 w-md-auto" @bind="selectedTimeframe" @bind:after="LoadAllData">
+                    <option value="7">Last 7 Days</option>
+                    <option value="14">Last 14 Days</option>
+                    <option value="30">Last 30 Days</option>
+                    <option value="90">Last 90 Days</option>
+                </select>
+            </div>
+            <button class="btn btn-primary rounded-pill px-3 shadow-sm transition-all hover-translate-y flex-shrink-0 d-flex align-items-center gap-2" @onclick='() => Navigation.NavigateTo("/admin/access-report")'>
+                <i class="bi bi-shield-lock"></i>
+                <span class="d-none d-lg-inline">Access Report</span>
+            </button>
+            <button class="btn btn-white shadow-sm rounded-circle p-2 transition-all hover-translate-y flex-shrink-0" @onclick="LoadAllData" disabled="@isLoading" title="Refresh Analytics">
+                @if (isLoading)
+                {
+                    <span class="spinner-border spinner-border-sm" role="status"></span>
+                }
+                else
+                {
+                    <i class="bi bi-arrow-clockwise text-primary"></i>
+                }
+            </button>
+        </div>
+    </div>
+
+    @if (hasError)
+    {
+        <div class="alert alert-danger rounded-4 shadow-sm" role="alert">
+            <div class="d-flex align-items-center gap-3">
+                <i class="bi bi-exclamation-triangle-fill fs-3"></i>
+                <div>
+                    <h5 class="alert-heading mb-1">Error Loading Analytics</h5>
+                    <p class="mb-2">@errorMessage</p>
+                    <button class="btn btn-sm btn-danger" @onclick="LoadAllData">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Retry
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+    else if (isLoading)
+    {
+        <div class="d-flex flex-column align-items-center justify-content-center py-5">
+            <div class="spinner-grow text-primary mb-3" role="status"></div>
+            <p class="text-muted fw-bold">Processing biometric intelligence data...</p>
+        </div>
+    }
+    else
+    {
+        <!-- System Health Score -->
+        <div class="glass-panel p-3 p-md-4 rounded-4 shadow-lg mb-4 border-0 position-relative overflow-hidden" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+            <div class="position-absolute top-0 end-0 p-3 opacity-10">
+                <i class="bi bi-cpu-fill fs-1 text-white"></i>
+            </div>
+            <div class="row align-items-center g-3">
+                <div class="col-12 col-md-8 text-center text-md-start">
+                    <h5 class="text-white text-uppercase small fw-bold mb-2 letter-spacing-wide">System Health Score</h5>
+                    <h1 class="fw-bold text-white mb-2 mobile-display-3" style="font-size: 3.5rem;">@biometricHealth?.SystemHealthScore.ToString("F1")<span class="fs-4">/100</span></h1>
+                    <p class="text-white text-opacity-75 mb-0 small">Biometric accuracy: @biometricHealth?.RecognitionSuccessRate.ToString("F1")% | Avg Response: @biometricHealth?.AverageResponseTimeMs.ToString("F0")ms</p>
+                </div>
+                <div class="col-12 col-md-4 text-center text-md-end">
+                    <div class="progress bg-white bg-opacity-20 rounded-pill mb-2" style="height: 12px;">
+                        <div class="progress-bar bg-white shadow-sm" role="progressbar" style="width: @biometricHealth?.SystemHealthScore%" aria-valuenow="@biometricHealth?.SystemHealthScore" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                    <span class="badge bg-white text-primary rounded-pill px-4 py-2 fw-bold shadow-sm">
+                        @GetHealthStatus(biometricHealth?.SystemHealthScore ?? 0)
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Biometric Health Metrics Grid -->
+        <div class="row g-3 g-md-4 mb-4">
+            <div class="col-6 col-md-3">
+                <div class="glass-panel p-3 p-md-4 rounded-4 shadow-sm border-0 h-100 transition-all hover-translate-y">
+                    <div class="d-flex align-items-center mb-2 mb-md-3">
+                        <div class="rounded-circle bg-success bg-opacity-10 p-2 p-md-3 me-2 me-md-3 d-flex align-items-center justify-content-center" style="width: 38px; height: 38px; min-width: 38px;">
+                            <i class="bi bi-shield-check text-success"></i>
+                        </div>
+                        <h6 class="text-muted text-uppercase small fw-bold mb-0" style="font-size: 0.65rem;">Recognition Rate</h6>
+                    </div>
+                    <h3 class="fw-bold text-success mb-1 ms-1">@biometricHealth?.RecognitionSuccessRate.ToString("F1")%</h3>
+                    <p class="text-muted small mb-0 ms-1 opacity-50" style="font-size: 0.7rem;">Verified match success</p>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="glass-panel p-3 p-md-4 rounded-4 shadow-sm border-0 h-100 transition-all hover-translate-y">
+                    <div class="d-flex align-items-center mb-2 mb-md-3">
+                        <div class="rounded-circle bg-info bg-opacity-10 p-2 p-md-3 me-2 me-md-3 d-flex align-items-center justify-content-center" style="width: 38px; height: 38px; min-width: 38px;">
+                            <i class="bi bi-speedometer2 text-info"></i>
+                        </div>
+                        <h6 class="text-muted text-uppercase small fw-bold mb-0" style="font-size: 0.65rem;">Response Time</h6>
+                    </div>
+                    <h3 class="fw-bold text-info mb-1 ms-1">@biometricHealth?.AverageResponseTimeMs.ToString("F0")ms</h3>
+                    <p class="text-muted small mb-0 ms-1 opacity-50" style="font-size: 0.7rem;">Average processing</p>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="glass-panel p-3 p-md-4 rounded-4 shadow-sm border-0 h-100 transition-all hover-translate-y">
+                    <div class="d-flex align-items-center mb-2 mb-md-3">
+                        <div class="rounded-circle bg-primary bg-opacity-10 p-2 p-md-3 me-2 me-md-3 d-flex align-items-center justify-content-center" style="width: 38px; height: 38px; min-width: 38px;">
+                            <i class="bi bi-graph-up text-primary"></i>
+                        </div>
+                        <h6 class="text-muted text-uppercase small fw-bold mb-0" style="font-size: 0.65rem;">Confidence</h6>
+                    </div>
+                    <h3 class="fw-bold text-primary mb-1 ms-1">@(biometricHealth?.AverageConfidenceScore.ToString("P1") ?? "0%")</h3>
+                    <p class="text-muted small mb-0 ms-1 opacity-50" style="font-size: 0.7rem;">Average match quality</p>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="glass-panel p-3 p-md-4 rounded-4 shadow-sm border-0 h-100 transition-all hover-translate-y">
+                    <div class="d-flex align-items-center mb-2 mb-md-3">
+                        <div class="rounded-circle bg-warning bg-opacity-10 p-2 p-md-3 me-2 me-md-3 d-flex align-items-center justify-content-center" style="width: 38px; height: 38px; min-width: 38px;">
+                            <i class="bi bi-exclamation-triangle text-warning"></i>
+                        </div>
+                        <h6 class="text-muted text-uppercase small fw-bold mb-0" style="font-size: 0.65rem;">Failed Logins</h6>
+                    </div>
+                    <h3 class="fw-bold text-warning mb-1 ms-1">@biometricHealth?.FailedLoginAttempts</h3>
+                    <p class="text-muted small mb-0 ms-1 opacity-50" style="font-size: 0.7rem;">Security alerts</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Failure Category Analysis -->
+        <div class="glass-panel p-4 rounded-4 shadow-sm mb-4 border-0">
+            <h5 class="fw-bold text-dark mb-3 mb-md-4 d-flex align-items-center">
+                <i class="bi bi-diagram-3 me-2 text-danger"></i> Biometric Failure Analysis
+            </h5>
+            <div class="row g-4">
+                @if (failureAnalysis != null && failureAnalysis.Any())
+                {
+                    <div class="col-md-6">
+                        <div class="list-group list-group-flush">
+                            @foreach (var failure in failureAnalysis)
+                            {
+                                <div class="list-group-item bg-transparent px-0 py-3 border-light">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="fw-bold text-dark small text-uppercase">@failure.Category</span>
+                                        <span class="badge bg-light text-muted fw-bold">@failure.Count (@failure.Percentage.ToString("F1")%)</span>
+                                    </div>
+                                    <div class="progress rounded-pill" style="height: 8px;">
+                                        <div class="progress-bar @GetCategoryColor(failure.Category) shadow-sm" role="progressbar" style="width: @failure.Percentage%" aria-valuenow="@failure.Percentage" aria-valuemin="0" aria-valuemax="100"></div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    <div class="col-md-6 border-start-md border-top border-top-md-0 pt-4 pt-md-0 d-flex flex-column justify-content-center px-lg-5">
+                        <div class="text-center">
+                            <i class="bi bi-shield-slash text-danger opacity-25 mb-3" style="font-size: 3rem;"></i>
+                            <h6 class="fw-bold text-muted text-uppercase small letter-spacing-wide">Primary Reason for Rejection</h6>
+                            <h2 class="fw-bold text-dark mb-3">@failureAnalysis.First().Category</h2>
+                            <p class="text-muted small">This represents @failureAnalysis.First().Percentage.ToString("F0")% of all biometric failures in the selected period. Review environmental factors or user training for this category.</p>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="col-12 text-center py-5 opacity-50">
+                        <i class="bi bi-emoji-smile fs-1 text-success d-block mb-2"></i>
+                        <p class="mb-0 small">No biometric failures detected. Maximum system efficiency reached.</p>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Reliability & Optimization Section -->
+        <div class="row g-4 mb-4">
+            <div class="col-12 col-lg-7">
+                <div class="glass-panel p-4 rounded-4 shadow-sm border-0 h-100">
+                    <h5 class="fw-bold text-dark mb-4 d-flex align-items-center">
+                        <i class="bi bi-person-badge-fill me-2 text-primary"></i> Workforce Reliability Insights
+                    </h5>
+                    @if (reliabilityLogs != null && reliabilityLogs.Any())
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="bg-light bg-opacity-50">
+                                    <tr class="small text-muted text-uppercase letter-spacing-wide">
+                                        <th class="ps-3 border-0">User</th>
+                                        <th class="border-0">Pattern</th>
+                                        <th class="border-0">Value</th>
+                                        <th class="text-end pe-3 border-0">Risk</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var log in reliabilityLogs)
+                                    {
+                                        <tr>
+                                            <td class="ps-3">
+                                                <div class="fw-bold text-dark">@log.UserName</div>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-light text-primary rounded-pill px-2">@log.Metric</span>
+                                            </td>
+                                            <td>
+                                                <span class="text-dark">@log.Value</span>
+                                            </td>
+                                            <td class="text-end pe-3">
+                                                <span class="badge @(log.Severity == "High" ? "bg-danger" : "bg-warning text-dark") rounded-pill px-3">
+                                                    @log.Severity
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center py-5 opacity-50">
+                            <i class="bi bi-shield-check fs-1 text-success d-block mb-2"></i>
+                            <p class="mb-0 small">No reliability issues detected this period.</p>
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="col-12 col-lg-5">
+                <div class="glass-panel p-4 rounded-4 shadow-sm border-0 h-100" style="background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);">
+                    <h5 class="fw-bold text-dark mb-4 d-flex align-items-center">
+                        <i class="bi bi-lightbulb-fill me-2 text-warning"></i> Optimization Recommendations
+                    </h5>
+                    
+                    @if (failureAnalysis != null && failureAnalysis.Any())
+                    {
+                        var topFailure = failureAnalysis.First();
+                        <div class="card border-0 rounded-4 shadow-sm mb-3">
+                            <div class="card-body p-4">
+                                <div class="d-flex align-items-center gap-3 mb-3">
+                                    <div class="rounded-circle @GetCategoryColor(topFailure.Category) bg-opacity-10 p-3">
+                                        <i class="bi bi-tools @GetCategoryTextColor(topFailure.Category) fs-4"></i>
+                                    </div>
+                                    <div>
+                                        <h6 class="fw-bold mb-0">Improve @topFailure.Category</h6>
+                                        <small class="text-muted">Top failure source (@topFailure.Percentage.ToString("F0")%)</small>
+                                    </div>
+                                </div>
+                                <p class="text-muted small mb-0">
+                                    @GetOptimizationTip(topFailure.Category)
+                                </p>
+                            </div>
+                        </div>
+                    }
+
+                    <div class="alert alert-info border-0 rounded-4 p-4 mt-auto">
+                        <h6 class="fw-bold mb-2 small text-uppercase">Pro-Tip</h6>
+                        <p class="mb-0 small">Automated reports are sent every Monday morning to supervisors. Ensure email settings are correctly configured in System Preferences.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Biometric Intelligence & Similarity Insights -->
+        <div class="glass-panel p-3 p-md-4 rounded-4 shadow-sm mb-4 border-0">
+            <h5 class="fw-bold text-dark mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <span><i class="bi bi-incognito me-2 text-primary"></i> Biometric Intelligence <span class="d-none d-md-inline">& Similarity Insights</span></span>
+                <span class="badge bg-primary bg-opacity-10 text-primary rounded-pill px-3 py-2 small fw-bold shadow-sm">Audit-Ready</span>
+            </h5>
+            
+            <div class="row row-cols-2 row-cols-md-2 row-cols-xl-4 g-3 g-md-4">
+                @if (similarityInsights != null && similarityInsights.Any())
+                {
+                    @foreach (var insight in similarityInsights.Take(8))
+                    {
+                        <div class="col">
+                            <div class="card h-100 rounded-4 border-0 shadow-sm overflow-hidden transition-all hover-translate-y">
+                                <div class="position-relative" style="height: 200px;">
+                                    @if (!string.IsNullOrEmpty(insight.ImagePath))
+                                    {
+                                        var insightSrc = PathHelper.FixImagePath(insight.ImagePath);
+                                        @if (!brokenImageSrcs.Contains(insightSrc))
+                                        {
+                                            <img src="@insightSrc" class="card-img-top w-100 h-100" style="object-fit: cover;" alt="Attempt Image" @onerror="@(() => OnAuditImageError(insightSrc))" />
+                                        }
+                                        else
+                                        {
+                                            <div class="w-100 h-100 bg-light d-flex align-items-center justify-content-center">
+                                                <i class="bi bi-image text-muted opacity-25" style="font-size: 4rem;" title="Image missing or moved"></i>
+                                            </div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <div class="w-100 h-100 bg-light d-flex align-items-center justify-content-center">
+                                            <i class="bi bi-person text-muted opacity-25" style="font-size: 4rem;"></i>
+                                        </div>
+                                    }
+                                    <div class="position-absolute top-0 end-0 m-2">
+                                        <span class="badge @(insight.IsSuccess ? "bg-success" : "bg-danger") shadow-sm rounded-pill px-3">
+                                            @(insight.IsSuccess ? "Verified" : "Rejected")
+                                        </span>
+                                    </div>
+                                    <div class="position-absolute bottom-0 start-0 w-100 p-2 bg-dark bg-opacity-50 text-white backdrop-blur">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <small class="fw-bold">@insight.Confidence.ToString("P1") Match</small>
+                                            <small class="opacity-75">@insight.Timestamp.ToString("HH:mm")</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="card-body p-3">
+                                    <div class="mb-2">
+                                        <small class="text-muted text-uppercase fw-bold letter-spacing-wide d-block mb-1" style="font-size: 0.65rem;">Attempted For</small>
+                                        <div class="fw-bold text-dark text-truncate">@insight.AttemptedUserName</div>
+                                    </div>
+                                    
+                                    @if (!insight.IsSuccess && !string.IsNullOrEmpty(insight.RecognizedUserEmail))
+                                    {
+                                        <div class="alert alert-warning p-2 mb-0 border-0 rounded-3 mt-2" style="font-size: 0.75rem;">
+                                            <i class="bi bi-exclamation-triangle-fill me-1"></i> Similarity: @insight.RecognizedUserEmail
+                                        </div>
+                                    }
+                                    else if (!insight.IsSuccess)
+                                    {
+                                         <div class="alert alert-danger p-2 mb-0 border-0 rounded-3 mt-2" style="font-size: 0.75rem;">
+                                            <i class="bi bi-x-circle-fill me-1"></i> @(insight.FailureCategory ?? "Verification Failed")
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="col-12 text-center py-5 opacity-50">
+                        <i class="bi bi-eye-slash fs-1 text-muted d-block mb-2"></i>
+                        <p class="mb-0 small">No biometric intelligence data recorded yet.</p>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Similarity by Confidence Band -->
+        <div class="glass-panel p-3 p-md-4 rounded-4 shadow-sm mb-4 border-0">
+            <h5 class="fw-bold text-dark mb-4 d-flex align-items-center">
+                <i class="bi bi-bar-chart-steps me-2 text-primary"></i> Similarity by Confidence Band
+            </h5>
+            @if (similarityByConfidence != null && similarityByConfidence.Any(g => g.Count > 0))
+            {
+                <div class="row g-4">
+                    @foreach (var group in similarityByConfidence.Where(g => g.Count > 0))
+                    {
+                        var badgeClass = group.Band == "High" ? "bg-success" : group.Band == "Medium" ? "bg-warning text-dark" : "bg-danger";
+                        var subtitle = group.Band == "High" ? "Verified-level matches" : group.Band == "Medium" ? "Moderate similarity" : "Potential confusion";
+                        <div class="col-12 col-lg-4">
+                            <div class="rounded-4 shadow-sm overflow-hidden h-100 @(group.Band == "High" ? "border border-success" : group.Band == "Medium" ? "border border-warning" : "border border-danger")">
+                                <div class="p-3 bg-light bg-opacity-50 d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="fw-bold mb-0 text-dark">@group.Band (@group.Label)</h6>
+                                        <small class="text-muted">@subtitle</small>
+                                    </div>
+                                    <span class="badge @badgeClass rounded-pill px-3 py-2">@group.Count</span>
+                                </div>
+                                <div class="p-3">
+                                    @if (group.Insights.Any())
+                                    {
+                                        <div class="row row-cols-1 row-cols-md-2 g-2">
+                                            @foreach (var insight in group.Insights.Take(6))
+                                            {
+                                                <div class="col">
+                                                    <div class="card rounded-3 border-0 shadow-sm overflow-hidden">
+                                                        <div class="position-relative" style="height: 100px;">
+                                                            @if (!string.IsNullOrEmpty(insight.ImagePath))
+                                                            {
+                                                                var bandInsightSrc = PathHelper.FixImagePath(insight.ImagePath);
+                                                                @if (!brokenImageSrcs.Contains(bandInsightSrc))
+                                                                {
+                                                                    <img src="@bandInsightSrc" class="card-img-top w-100 h-100" style="object-fit: cover;" alt="Attempt" @onerror="@(() => OnAuditImageError(bandInsightSrc))" />
+                                                                }
+                                                                else
+                                                                {
+                                                                    <div class="w-100 h-100 bg-light d-flex align-items-center justify-content-center">
+                                                                        <i class="bi bi-image text-muted opacity-25" title="Image missing or moved"></i>
+                                                                    </div>
+                                                                }
+                                                            }
+                                                            else
+                                                            {
+                                                                <div class="w-100 h-100 bg-light d-flex align-items-center justify-content-center">
+                                                                    <i class="bi bi-person text-muted opacity-25"></i>
+                                                                </div>
+                                                            }
+                                                            <span class="position-absolute top-0 end-0 m-1 badge @(insight.IsSuccess ? "bg-success" : "bg-danger") rounded-pill" style="font-size: 0.65rem;">@insight.Confidence.ToString("P0")</span>
+                                                        </div>
+                                                        <div class="card-body p-2">
+                                                            <div class="fw-bold text-truncate small" title="@insight.AttemptedUserName">@insight.AttemptedUserName</div>
+                                                            <small class="text-muted x-small">@insight.Timestamp.ToString("HH:mm dd MMM")</small>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            }
+                                        </div>
+                                        @if (group.Count > group.Insights.Count)
+                                        {
+                                            <small class="text-muted d-block mt-2">+@(group.Count - group.Insights.Count) more</small>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <p class="text-muted small mb-0">No attempts in this band</p>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="text-center py-5 opacity-50">
+                    <i class="bi bi-bar-chart-steps fs-1 text-muted d-block mb-2"></i>
+                    <p class="mb-0 small">No similarity data in confidence bands for the selected period.</p>
+                </div>
+            }
+        </div>
+
+        <!-- Attendance Trends & Peak Usage -->
+        <div class="row g-4 mb-4">
+            <div class="col-12 col-lg-8">
+                <div class="glass-panel p-4 rounded-4 shadow-sm h-100">
+                    <h5 class="fw-bold text-dark mb-4 d-flex align-items-center justify-content-between">
+                        <span><i class="bi bi-calendar-week me-2 text-primary"></i> Attendance Trends</span>
+                        <span class="badge bg-light text-muted rounded-pill px-3 small">@attendanceTrends?.TotalWorkingDays Days</span>
+                    </h5>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <div class="bg-light bg-opacity-50 rounded-3 p-3">
+                                <small class="text-muted text-uppercase fw-bold d-block mb-1">Avg Attendance</small>
+                                <h4 class="fw-bold text-primary mb-0">@attendanceTrends?.AverageAttendanceRate.ToString("F1")%</h4>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="bg-light bg-opacity-50 rounded-3 p-3">
+                                <small class="text-muted text-uppercase fw-bold d-block mb-1">Avg Late Rate</small>
+                                <h4 class="fw-bold text-warning mb-0">@attendanceTrends?.AverageLateRate.ToString("F1")%</h4>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="bg-light bg-opacity-50 rounded-3 p-3">
+                                <small class="text-muted text-uppercase fw-bold d-block mb-1">Total Employees</small>
+                                <h4 class="fw-bold text-dark mb-0">@attendanceTrends?.TotalEmployees</h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="height: 250px; position: relative;" class="bg-white rounded-4 p-3 shadow-inner mb-4">
+                        <canvas id="attendanceTrendChart"></canvas>
+                    </div>
+
+                    <h5 class="fw-bold text-dark mb-4 mt-5 d-flex align-items-center">
+                        <i class="bi bi-person-plus-fill me-2 text-info"></i> Workforce Growth Trends
+                    </h5>
+                    <div style="height: 250px; position: relative;" class="bg-white rounded-4 p-3 shadow-inner">
+                        <canvas id="registrationTrendChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-lg-4">
+                <div class="glass-panel p-4 rounded-4 shadow-sm h-100">
+                    <h5 class="fw-bold text-dark mb-4 d-flex align-items-center">
+                        <i class="bi bi-clock-history me-2 text-info"></i> Peak Usage Times
+                    </h5>
+                    @if (peakUsage != null)
+                    {
+                        <div class="mb-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="text-muted small fw-bold">PEAK HOUR</span>
+                                <span class="badge bg-info bg-opacity-10 text-info rounded-pill px-3">@peakUsage.PeakHour:00</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-muted small fw-bold">BUSIEST DAY</span>
+                                <span class="badge bg-primary bg-opacity-10 text-primary rounded-pill px-3">@peakUsage.BusiestDay</span>
+                            </div>
+                        </div>
+                        <hr class="my-3" />
+                        <h6 class="text-muted text-uppercase small fw-bold mb-3">Hourly Distribution</h6>
+                        <div class="hourly-usage-list" style="max-height: 250px; overflow-y: auto;">
+                            @foreach (var hour in peakUsage.HourlyClockInDistribution.OrderByDescending(h => h.Count).Take(10))
+                            {
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="text-muted small">@hour.Hour:00 - @(hour.Hour + 1):00</span>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="progress bg-light" style="width: 100px; height: 6px;">
+                                            <div class="progress-bar bg-info" style="width: @((double)hour.Count / peakUsage.HourlyClockInDistribution.Max(h => h.Count) * 100)%"></div>
+                                        </div>
+                                        <span class="badge bg-light text-dark rounded-pill px-2 small">@hour.Count</span>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Device & Location Analytics -->
+        <div class="row g-4">
+            <div class="col-12 col-lg-6">
+                <div class="glass-panel p-4 rounded-4 shadow-sm h-100">
+                    <h5 class="fw-bold text-dark mb-4 d-flex align-items-center justify-content-between">
+                        <span><i class="bi bi-phone me-2 text-success"></i> Device Analytics</span>
+                        <span class="badge bg-light text-muted rounded-pill px-3 small">@deviceAnalytics?.TotalUniqueDevices Devices</span>
+                    </h5>
+                    @if (deviceAnalytics?.TopDevices?.Any() == true)
+                    {
+                        <div class="list-group list-group-flush">
+                            @foreach (var device in deviceAnalytics.TopDevices.Take(8))
+                            {
+                                <div class="list-group-item bg-transparent d-flex justify-content-between align-items-center px-0 py-3 border-light">
+                                    <div>
+                                        <div class="fw-bold text-dark small">@device.DeviceId</div>
+                                        <small class="text-muted">@device.UniqueUsers unique users</small>
+                                    </div>
+                                    <span class="badge bg-success bg-opacity-10 text-success rounded-pill px-3">@device.UsageCount uses</span>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center py-5 opacity-50">
+                            <i class="bi bi-phone-slash fs-1 text-muted d-block mb-2"></i>
+                            <p class="mb-0 small">No device data available</p>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="col-12 col-lg-6">
+                <div class="glass-panel p-4 rounded-4 shadow-sm h-100">
+                    <h5 class="fw-bold text-dark mb-4 d-flex align-items-center">
+                        <i class="bi bi-geo-alt me-2 text-warning"></i> Geofence Compliance
+                    </h5>
+                    <div class="row g-3 mb-4">
+                        <div class="col-6">
+                            <div class="bg-success bg-opacity-10 rounded-3 p-3 text-center">
+                                <i class="bi bi-check-circle-fill text-success fs-3 d-block mb-2"></i>
+                                <h3 class="fw-bold text-success mb-1">@((100 - (deviceAnalytics?.OutOfAreaPercentage ?? 0)).ToString("F1"))%</h3>
+                                <small class="text-muted">In Area</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="bg-warning bg-opacity-10 rounded-3 p-3 text-center">
+                                <i class="bi bi-exclamation-triangle-fill text-warning fs-3 d-block mb-2"></i>
+                                <h3 class="fw-bold text-warning mb-1">@deviceAnalytics?.OutOfAreaPercentage.ToString("F1")%</h3>
+                                <small class="text-muted">Out of Area</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="alert alert-warning border-0 bg-warning bg-opacity-10 rounded-4">
+                        <div class="d-flex align-items-center gap-3">
+                            <i class="bi bi-info-circle-fill text-warning fs-4"></i>
+                            <div>
+                                <strong class="d-block mb-1">@deviceAnalytics?.TotalOutOfAreaEvents Geofence Violations</strong>
+                                <small class="text-muted">Detected in the selected period. Review for compliance.</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private BiometricHealthMetrics? biometricHealth;
+    private AttendanceTrendAnalysis? attendanceTrends;
+    private PeakUsageAnalysis? peakUsage;
+    private DeviceLocationAnalytics? deviceAnalytics;
+    private List<FailureCategoryData>? failureAnalysis;
+    private List<SimilarityInsight>? similarityInsights;
+    private List<SimilarityGroupByConfidence>? similarityByConfidence;
+    private List<RegistrationTrend>? registrationTrends;
+    private List<UserReliabilityLog>? reliabilityLogs;
+    private bool isLoading = true;
+    private int selectedTimeframe = 30;
+    private HubConnection? hubConnection;
+    private string? lastUpdateMessage;
+    private System.Threading.CancellationTokenSource? _debounceCts;
+    private string? errorMessage;
+    private bool hasError = false;
+    private readonly HashSet<string> brokenImageSrcs = new(StringComparer.OrdinalIgnoreCase);
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Auth check moved to OnAfterRenderAsync
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                if (!Auth.IsAuthenticated || !Auth.IsAdmin)
+                {
+                    Navigation.NavigateTo("/login");
+                    return;
+                }
+
+                await LoadAllData();
+                
+                // Initialize SignalR in background (non-blocking)
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await InitializeSignalR();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"SignalR initialization failed (non-critical): {ex.Message}");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                hasError = true;
+                errorMessage = $"Page initialization failed: {ex.Message}";
+                Console.WriteLine($"Error in OnAfterRenderAsync: {ex}");
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+
+        if (!isLoading && !hasError && (attendanceTrends?.DailyData?.Any() == true || registrationTrends?.Any() == true))
+        {
+            try
+            {
+                await RenderCharts();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Chart rendering failed (non-critical): {ex.Message}");
+            }
+        }
+    }
+
+    private Task OnAuditImageError(string resolvedSrc)
+    {
+        if (string.IsNullOrEmpty(resolvedSrc)) return Task.CompletedTask;
+        if (brokenImageSrcs.Add(resolvedSrc))
+            StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task LoadAllData()
+    {
+        isLoading = true;
+        hasError = false;
+        errorMessage = null;
+        brokenImageSrcs.Clear();
+        StateHasChanged();
+
+        try
+        {
+            var endDate = DateTime.UtcNow.Date;
+            var startDate = endDate.AddDays(-selectedTimeframe);
+
+            biometricHealth = await AnalyticsService.GetBiometricHealthMetricsAsync(startDate, endDate);
+            attendanceTrends = await AnalyticsService.GetAttendanceTrendsAsync(startDate, endDate);
+            peakUsage = await AnalyticsService.GetPeakUsageAnalysisAsync(startDate, endDate);
+            deviceAnalytics = await AnalyticsService.GetDeviceLocationAnalyticsAsync(startDate, endDate);
+            failureAnalysis = await AnalyticsService.GetFailureAnalysisAsync(startDate, endDate);
+            similarityInsights = await AnalyticsService.GetSimilarityInsightsAsync(50);
+            similarityByConfidence = await AnalyticsService.GetSimilarityInsightsGroupedByConfidenceAsync(startDate, endDate, 10);
+            registrationTrends = await AnalyticsService.GetRegistrationTrendsAsync(selectedTimeframe);
+            reliabilityLogs = await AnalyticsService.GetReliabilityInsightsAsync(selectedTimeframe);
+            
+            // Initialize with empty collections if null
+            failureAnalysis ??= new List<FailureCategoryData>();
+            similarityInsights ??= new List<SimilarityInsight>();
+            similarityByConfidence ??= new List<SimilarityGroupByConfidence>();
+            registrationTrends ??= new List<RegistrationTrend>();
+        }
+        catch (Exception ex)
+        {
+            hasError = true;
+            errorMessage = $"Failed to load analytics data: {ex.Message}";
+            Console.WriteLine($"Error loading deep analytics: {ex}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RenderCharts()
+    {
+        if (attendanceTrends?.DailyData?.Any() == true)
+        {
+            var labels = attendanceTrends.DailyData.Select(d => d.Date.ToString("MMM dd")).ToArray();
+            var presentData = attendanceTrends.DailyData.Select(d => d.TotalPresent).ToArray();
+            var lateData = attendanceTrends.DailyData.Select(d => d.Late).ToArray();
+
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("analytics.renderAttendanceTrendChart", "attendanceTrendChart", labels, presentData, lateData);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error rendering attendance chart: {ex.Message}");
+            }
+        }
+
+        if (registrationTrends?.Any() == true)
+        {
+            var labels = registrationTrends.Select(t => t.Date.ToString("MMM dd")).ToArray();
+            var data = registrationTrends.Select(t => t.Count).ToArray();
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("analytics.renderRegistrationChart", "registrationTrendChart", labels, data);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error rendering registration chart: {ex.Message}");
+            }
+        }
+    }
+
+    private string GetHealthStatus(double score)
+    {
+        if (score >= 90) return "EXCELLENT";
+        if (score >= 75) return "GOOD";
+        if (score >= 60) return "FAIR";
+        return "NEEDS ATTENTION";
+    }
+
+    private string GetCategoryColor(string category)
+    {
+        return category switch
+        {
+            "LowConfidence" => "bg-warning",
+            "NoFace" => "bg-danger",
+            "WrongUser" => "bg-dark",
+            "MultipleFaces" => "bg-info",
+            "Lighting" => "bg-primary",
+            "Pose" => "bg-secondary",
+            _ => "bg-muted"
+        };
+    }
+
+    private string GetCategoryTextColor(string category)
+    {
+        return category switch
+        {
+            "LowConfidence" => "text-warning",
+            "NoFace" => "text-danger",
+            "WrongUser" => "text-dark",
+            "MultipleFaces" => "text-info",
+            "Lighting" => "text-primary",
+            "Pose" => "text-secondary",
+            _ => "text-muted"
+        };
+    }
+
+    private string GetOptimizationTip(string category)
+    {
+        return category switch
+        {
+            "LowConfidence" => "Consider increasing the minimum confidence threshold in settings or re-enrolling users with poor quality templates.",
+            "NoFace" => "Ensure the camera is at eye level and users are not wearing masks, heavy sunglasses, or face coverings during verification.",
+            "WrongUser" => "Multiple similarity hits detected. Review user enrollment images for potential duplicates or shared physical characteristics.",
+            "MultipleFaces" => "Restrict access to the verification area to one person at a time to prevent background interference.",
+            "Lighting" => "Improve lighting conditions at the clocking station. Avoid strong backlighting or harsh shadows on the user's face.",
+            "Pose" => "Advise users to look directly at the camera and maintain a neutral expression. Consider adding a 'look here' sticker.",
+            _ => "Review the audit logs for specific error details to identify environmental or user-specific issues."
+        };
+    }
+
+    private async Task InitializeSignalR()
+    {
+        try
+        {
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(Navigation.ToAbsoluteUri("/hubs/analytics"), options =>
+                {
+                    // Bypass SSL certificate validation in development
+                    options.HttpMessageHandlerFactory = (handler) =>
+                    {
+                        if (handler is HttpClientHandler clientHandler)
+                        {
+                            clientHandler.ServerCertificateCustomValidationCallback = 
+                                (sender, certificate, chain, sslPolicyErrors) => true;
+                        }
+                        return handler;
+                    };
+                })
+                .WithAutomaticReconnect()
+                .ConfigureLogging(logging =>
+                {
+                    logging.SetMinimumLevel(LogLevel.Warning);
+                })
+                .Build();
+
+            hubConnection.On<string, string>("AnalyticsUpdated", async (eventType, message) =>
+            {
+                await HandleRealTimeUpdate(eventType, message);
+            });
+
+            await hubConnection.StartAsync();
+            Console.WriteLine("SignalR connection established for analytics updates");
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error initializing SignalR: {ex.Message}");
+        }
+    }
+
+    private async Task HandleRealTimeUpdate(string eventType, string message)
+    {
+        try
+        {
+            // Debounce logic to prevent UI flickering on burst events
+            _debounceCts?.Cancel();
+            _debounceCts = new System.Threading.CancellationTokenSource();
+            var token = _debounceCts.Token;
+
+            await InvokeAsync(() =>
+            {
+                lastUpdateMessage = message;
+                StateHasChanged();
+            });
+
+            // Wait 1.5 seconds before refreshing heavy data
+            await Task.Delay(1500, token);
+
+            if (!token.IsCancellationRequested)
+            {
+                await InvokeAsync(async () =>
+                {
+                    await LoadAllData();
+                    // Clear message after successful reload
+                    lastUpdateMessage = null; 
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (TaskCanceledException)
+        {
+            // Newer update came in, ignore this one
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error processing analytics update: {ex.Message}");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _debounceCts?.Cancel();
+        _debounceCts?.Dispose();
+        
+        if (hubConnection != null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}
