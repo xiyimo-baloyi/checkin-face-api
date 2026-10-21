@@ -5,6 +5,16 @@
     "slotSetting": false
   },
   {
+    "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
+    "value": "false",
+    "slotSetting": false
+  },
+  {
+    "name": "WEBSITES_ENABLE_APP_SERVICE_STORAGE",
+    "value": "true",
+    "slotSetting": false
+  },
+  {
     "name": "ASPNETCORE_LOGGING__CONSOLE__DISABLECOLORS",
     "value": "true",
     "slotSetting": false
