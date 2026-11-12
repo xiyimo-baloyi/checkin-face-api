@@ -1,0 +1,15 @@
+**/bin/
+**/obj/
+.git/
+.github/
+.vscode/
+.vs/
+**/publish/
+**/.DS_Store
+**/*.user
+**/*.suo
+**/appsettings.Local.json
+**/appsettings.*.local.json
+**/wwwroot/uploads/
+**/hangfire.db
+**/hangfire.db-*
