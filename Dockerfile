@@ -13,5 +13,7 @@ ENV ASPNETCORE_URLS=http://0.0.0.0:8080 \
     DOTNET_RUNNING_IN_CONTAINER=true
 EXPOSE 8080
 COPY --from=build /app/publish .
+# Hangfire currently writes a SQLite file relative to the working directory.
+RUN chown -R $APP_UID:$APP_UID /app
 USER $APP_UID
 ENTRYPOINT ["dotnet", "Africanideasfaceapi.dll"]
