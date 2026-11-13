@@ -244,7 +244,8 @@ a:hover {
 }
 
 .glass-panel {
-  background: var(--surface-card) !important;
+  /* Allow per-card inline backgrounds (e.g. blue highlight cards) to override the default. */
+  background: var(--surface-card);
   border: 1px solid #e2e8f0 !important;
   box-shadow: var(--shadow-md);
   backdrop-filter: none !important;
