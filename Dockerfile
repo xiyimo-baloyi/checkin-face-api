@@ -2,6 +2,8 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY Africanideasfaceapi.csproj ./
 COPY global.json ./
+# .NET 10 detects Blazor framework assets during restore only when Razor files are present.
+COPY Components/ ./Components/
 RUN dotnet restore Africanideasfaceapi.csproj
 COPY . .
 RUN dotnet publish Africanideasfaceapi.csproj -c Release -o /app/publish --no-restore
