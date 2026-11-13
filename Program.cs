@@ -73,6 +73,8 @@ app.Use(async (context, next) =>
 });
 
 app.UseStaticFiles();
+// Map .NET 10 static web assets, including the Blazor framework bootstrap script.
+app.MapStaticAssets();
 app.UseAntiforgery();
 
 // Use Session for authentication state persistence
