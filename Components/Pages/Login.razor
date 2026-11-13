@@ -324,7 +324,9 @@
     private int multiFrameCount = 2;
     private int livenessStartupDelayMs = 350;
     private Dictionary<string, object>? livenessOptions;
-    private const int RecognitionTimeoutSeconds = 15;
+    // Allow Azure Face detection, identification and Cosmos DB lookup to complete on slower networks.
+    // Override with LoginSettings__RecognitionTimeoutSeconds in Coolify (15–120 seconds).
+    private int recognitionTimeoutSeconds = 45;
 
     // === Initialization ===
     protected override void OnInitialized()
@@ -347,6 +349,9 @@
 
                 if (int.TryParse(Configuration["LoginSettings:LivenessStartupDelayMs"], out var livenessDelay) && livenessDelay >= 0)
                     livenessStartupDelayMs = livenessDelay;
+
+                if (int.TryParse(Configuration["LoginSettings:RecognitionTimeoutSeconds"], out var timeoutSeconds))
+                    recognitionTimeoutSeconds = Math.Clamp(timeoutSeconds, 15, 120);
 
                 livenessOptions = BuildLivenessOptionsFromConfig(Configuration);
             }
@@ -533,10 +538,11 @@
                     {
                         recognitionStartedAt = DateTimeOffset.UtcNow;
                         recognitionTask = FaceApiService.RecognizeFromMultipleFramesAsync(streams, UserService);
-                        var completedTask = await Task.WhenAny(recognitionTask, Task.Delay(TimeSpan.FromSeconds(RecognitionTimeoutSeconds)));
+                        var completedTask = await Task.WhenAny(recognitionTask, Task.Delay(TimeSpan.FromSeconds(recognitionTimeoutSeconds)));
                         if (completedTask != recognitionTask)
                         {
-                            ErrorMessage = "Recognition timed out. Please try again.";
+                            ErrorMessage = "Recognition is taking longer than expected. Please try again.";
+                            TelemetryService.TrackFaceLoginStage("RecognitionTimeout", false, loginFrames.Count, loginFrames.Sum(f => (long)f.Length), (long)(DateTimeOffset.UtcNow - recognitionStartedAt).TotalMilliseconds, error: $"Recognition exceeded {recognitionTimeoutSeconds}s");
                             return;
                         }
 
@@ -555,10 +561,11 @@
                     imageStream!.Position = 0;
                     recognitionStartedAt = DateTimeOffset.UtcNow;
                     recognitionTask = FaceApiService.RecognizeFaceAsync(imageStream, UserService);
-                    var completedTask = await Task.WhenAny(recognitionTask, Task.Delay(TimeSpan.FromSeconds(RecognitionTimeoutSeconds)));
+                    var completedTask = await Task.WhenAny(recognitionTask, Task.Delay(TimeSpan.FromSeconds(recognitionTimeoutSeconds)));
                     if (completedTask != recognitionTask)
                     {
-                        ErrorMessage = "Recognition timed out. Please try again.";
+                        ErrorMessage = "Recognition is taking longer than expected. Please try again.";
+                        TelemetryService.TrackFaceLoginStage("RecognitionTimeout", false, loginFrames.Count, loginFrames.Sum(f => (long)f.Length), (long)(DateTimeOffset.UtcNow - recognitionStartedAt).TotalMilliseconds, error: $"Recognition exceeded {recognitionTimeoutSeconds}s");
                         return;
                     }
 
