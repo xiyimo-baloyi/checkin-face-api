@@ -1,10 +1,9 @@
 // African Ideas Attendance Service Worker
 // Only handles same-origin static assets; Blazor navigations and /admin /uploads bypass the SW
 // to avoid synthetic error responses and broken dynamic loads.
-const CACHE_NAME = 'african-ideas-v6';
+const CACHE_NAME = 'african-ideas-v7';
 
 const ASSETS_TO_CACHE = [
-    '/',
     '/offline.html',
     '/app.css',
     '/css/mobile-overrides.css',
@@ -79,23 +78,18 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
     if (!shouldHandleFetch(event)) return;
 
+    // Prefer the network so a previous deployment cannot keep old UI scripts and CSS alive.
+    // Serve cached static assets only when offline.
     event.respondWith(
-        caches.match(event.request)
-            .then(cachedResponse => {
-                const fetchPromise = fetch(event.request).then(networkResponse => {
-                    if (networkResponse.ok) {
-                        return caches.open(CACHE_NAME).then(cache => {
-                            cache.put(event.request, networkResponse.clone());
-                            return networkResponse;
-                        });
-                    }
-                    return networkResponse;
-                }).catch(() => {
-                    if (cachedResponse) return cachedResponse;
-                    return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
-                });
-
-                return cachedResponse || fetchPromise;
-            })
+        fetch(event.request).then(networkResponse => {
+            if (networkResponse.ok) {
+                const copy = networkResponse.clone();
+                event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)));
+            }
+            return networkResponse;
+        }).catch(async () => {
+            const cached = await caches.match(event.request);
+            return cached || new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+        })
     );
 });
