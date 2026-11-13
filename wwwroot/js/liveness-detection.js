@@ -8,7 +8,6 @@ const DEFAULTS = {
     minElapsedMs: 600,
     callbackThrottleMs: 350,
     timeoutMs: 12000,
-    generousThreshold: 0.5,
     analysisMaxWidth: 320,
 };
 
@@ -160,13 +159,27 @@ function _runMonitor(videoElement, dotNetRef) {
         };
     }
 
-    function brightnessForRegion(r) {
-        const id = ctx.getImageData(Math.floor(r.x), Math.floor(r.y), Math.floor(r.w), Math.floor(r.h));
+    // Read the pixel buffer once per frame instead of five expensive canvas readbacks.
+    // This makes the movement detector more responsive on lower-end phones.
+    const regions = Object.entries(getRegionDefs(canvas.width, canvas.height))
+        .map(([name, r]) => ({
+            name,
+            x: Math.floor(r.x),
+            y: Math.floor(r.y),
+            w: Math.floor(r.w),
+            h: Math.floor(r.h),
+        }));
+
+    function brightnessForRegion(pixels, region) {
         let sum = 0;
         let samples = 0;
-        for (let i = 0; i < id.data.length; i += 16) {
-            sum += id.data[i] * 0.299 + id.data[i + 1] * 0.587 + id.data[i + 2] * 0.114;
-            samples++;
+        const stride = canvas.width * 4;
+        for (let y = region.y; y < region.y + region.h; y++) {
+            for (let x = region.x; x < region.x + region.w; x += 4) {
+                const i = y * stride + x * 4;
+                sum += pixels[i] * 0.299 + pixels[i + 1] * 0.587 + pixels[i + 2] * 0.114;
+                samples++;
+            }
         }
         return samples > 0 ? sum / samples : 0;
     }
@@ -188,10 +201,10 @@ function _runMonitor(videoElement, dotNetRef) {
         } catch {
             return null;
         }
-        const defs = getRegionDefs(canvas.width, canvas.height);
+        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         const out = {};
-        for (const [key, rect] of Object.entries(defs)) {
-            out[key] = brightnessForRegion(rect);
+        for (const region of regions) {
+            out[region.name] = brightnessForRegion(pixels, region);
         }
         return out;
     }
@@ -254,15 +267,10 @@ function _runMonitor(videoElement, dotNetRef) {
         if (elapsed > _cfg.timeoutMs && !challengeCompleted) {
             clearInterval(monitorInterval);
             monitorInterval = null;
-            if (motionScore > _cfg.requiredScore * _cfg.generousThreshold) {
-                challengeCompleted = true;
-                _state = 'passed';
-                _throttledCallback(dotNetRef, 'completed', 'Done! You can capture now.', true);
-            } else {
-                _state = 'timedOut';
-                _throttledCallback(dotNetRef, 'timeout',
-                    `Timed out. Please try again: ${instruction}`, true);
-            }
+            // Do not approve partially completed challenges at timeout.
+            _state = 'timedOut';
+            _throttledCallback(dotNetRef, 'timeout',
+                `Timed out. Please try again: ${instruction}`, true);
         }
     }, _cfg.sampleIntervalMs);
 }
