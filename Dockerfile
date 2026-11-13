@@ -9,7 +9,7 @@ RUN dotnet publish Africanideasfaceapi.csproj -c Release -o /app/publish --no-re
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 # Coolify uses curl or wget to probe HTTP health endpoints.
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends curl wget ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 ENV ASPNETCORE_URLS=http://0.0.0.0:8080 \
     ASPNETCORE_ENVIRONMENT=Production \
