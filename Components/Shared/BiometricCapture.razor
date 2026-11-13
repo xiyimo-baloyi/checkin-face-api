@@ -322,7 +322,7 @@
     [Parameter] public bool RequireLiveness { get; set; } = true;
     [Parameter] public bool MultiFrameEnabled { get; set; } = true;
     [Parameter] public int MultiFrameCount { get; set; } = 3;
-    [Parameter] public int LivenessStartupDelayMs { get; set; } = 350;
+    [Parameter] public int LivenessStartupDelayMs { get; set; } = 100;
     [Parameter] public Dictionary<string, object>? LivenessOptions { get; set; }
     [Parameter] public EventCallback<CaptureResult> OnPhotoCaptured { get; set; }
     [Parameter] public EventCallback OnCancelled { get; set; }
